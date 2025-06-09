@@ -101,9 +101,21 @@ class GameEngine:
         self.screen.fill((34, 139, 34))
 
         # 2) Draw buildings (cover)
+        # 2) Draw detailed buildings
         for b in self.world.buildings:
-            rect = pygame.Rect(b['x'], b['y'], b['width'], b['height'])
-            pygame.draw.rect(self.screen, (100, 100, 100), rect)
+            # outer walls
+            for w in b.get('walls', []):
+                pygame.draw.rect(self.screen, (80, 80, 80),
+                                 (w['x'], w['y'], w['width'], w['height']))
+            # doors
+            for d in b.get('doors', []):
+                pygame.draw.rect(self.screen, (150, 75,  0),
+                                 (d['x'], d['y'], d['width'], d['height']))
+            # interior walls
+            for i in b.get('interiors', []):
+                pygame.draw.rect(self.screen, (160, 160, 160),
+                                 (i['x'], i['y'], i['width'], i['height']))
+
 
         # 3) Players remaining counter
         remaining = len(self.agents)

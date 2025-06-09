@@ -1,16 +1,50 @@
 buildings:
-  # x, y are top-left coords
-  - x: 150
-    y: 100
-    width: 100
-    height: 80
+  - walls:
+      - {x: 100, y: 100, width: 100, height: 5}
+      - {x: 100, y: 100, width: 5,   height: 100}
+      - {x: 100, y: 195, width: 100, height: 5}
+      - {x: 195, y: 100, width: 5,   height: 100}
+    doors:
+      - {x: 145, y: 100, width: 10, height: 5}
+    interiors:
+      - {x: 145, y: 145, width: 50, height: 5}
 
-  - x: 400
-    y: 300
-    width: 120
-    height: 60
+  - walls:
+      - {x: 300, y:  80, width: 120, height: 5}
+      - {x: 300, y:  80, width: 5,   height: 120}
+      - {x: 300, y: 195, width: 120, height: 5}
+      - {x: 415, y:  80, width: 5,   height: 120}
+    doors:
+      - {x: 355, y: 195, width: 10, height: 5}
+    interiors:
+      - {x: 355, y: 115, width: 50, height: 5}
 
-  - x: 600
-    y: 150
-    width: 80
-    height: 100
+  - walls:
+      - {x: 500, y: 300, width: 90,  height: 5}
+      - {x: 500, y: 300, width: 5,   height: 90}
+      - {x: 500, y: 385, width: 90,  height: 5}
+      - {x: 585, y: 300, width: 5,   height: 90}
+    doors:
+      - {x: 540, y: 300, width: 10,  height: 5}
+    interiors:
+      - {x: 540, y: 345, width: 50,  height: 5}
+
+  - walls:
+      - {x: 150, y: 400, width: 80,  height: 5}
+      - {x: 150, y: 400, width: 5,   height: 80}
+      - {x: 150, y: 475, width: 80,  height: 5}
+      - {x: 225, y: 400, width: 5,   height: 80}
+    doors:
+      - {x: 190, y: 400, width: 10,  height: 5}
+    interiors:
+      - {x: 190, y: 435, width: 40,  height: 5}
+
+  - walls:
+      - {x: 600, y: 120, width: 100, height: 5}
+      - {x: 600, y: 120, width: 5,   height: 100}
+      - {x: 600, y: 215, width: 100, height: 5}
+      - {x: 695, y: 120, width: 5,   height: 100}
+    doors:
+      - {x: 645, y: 120, width: 10,  height: 5}
+    interiors:
+      - {x: 645, y: 155, width: 50,  height: 5}
