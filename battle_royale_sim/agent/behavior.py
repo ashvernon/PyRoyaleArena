@@ -1,5 +1,6 @@
 import random
 import math
+import time
 from ..utils import distance
 
 class Behavior:
@@ -7,6 +8,55 @@ class Behavior:
         self.agent = agent
         self.world = world
         self.storm = storm
+        self.last_patrol_time = 0
+        self.patrol_target = None
+
+    def find_building_containing(self, pos):
+        for b in self.world.buildings:
+            xs = [w['x'] for w in b.get('walls',[])]
+            ws = [w['width'] for w in b.get('walls',[])]
+            ys = [w['y'] for w in b.get('walls',[])]
+            hs = [w['height'] for w in b.get('walls',[])]
+            minx = min(xs)
+            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
+            miny = min(ys)
+            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+            if minx <= pos[0] <= maxx and miny <= pos[1] <= maxy:
+                return b
+        return None
+
+    def nearest_door(self, agent_pos, building):
+        doors = building.get('doors', [])
+        if not doors:
+            xs = [w['x'] for w in building.get('walls',[])]
+            ws = [w['width'] for w in building.get('walls',[])]
+            ys = [w['y'] for w in building.get('walls',[])]
+            hs = [w['height'] for w in building.get('walls',[])]
+            minx = min(xs)
+            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
+            miny = min(ys)
+            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+            return ((minx + maxx) / 2, (miny + maxy) / 2)
+        return min(
+            [(d['x'] + d['width'] / 2, d['y'] + d['height'] / 2) for d in doors],
+            key=lambda pos: distance(agent_pos, pos)
+        )
+
+    def random_point_in_building(self, building):
+        xs = [w['x'] for w in building.get('walls',[])]
+        ws = [w['width'] for w in building.get('walls',[])]
+        ys = [w['y'] for w in building.get('walls',[])]
+        hs = [w['height'] for w in building.get('walls',[])]
+        minx = min(xs)
+        maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
+        miny = min(ys)
+        maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+        for _ in range(10):
+            px = random.uniform(minx + 8, maxx - 8)
+            py = random.uniform(miny + 8, maxy - 8)
+            if not self.world.in_wall((px, py)):
+                return (px, py)
+        return ((minx + maxx) / 2, (miny + maxy) / 2)
 
     def select_action(self, agents, loot_items):
         a = self.agent
@@ -19,20 +69,15 @@ class Behavior:
             attack_score = (a.health / 100.0) * max(0.0, 1 - d_enemy / a.inventory.weapons[0].range)
 
         # 2) Loot utility
-        # Only consider loot boxes the agent could "notice" nearby
-        LOOT_SENSE_RADIUS = 60  # px, tweak as needed
-
+        LOOT_SENSE_RADIUS = 60
         visible_loot = [
             it for it in loot_items
             if distance(a.pos, it['pos']) < LOOT_SENSE_RADIUS
-            # optionally: and self.world.has_line_of_sight(a.pos, it['pos'])
         ]
-
         loot_dists = [distance(a.pos, it['pos']) for it in visible_loot]
         d_loot = min(loot_dists, default=math.inf)
         inv_load = len(a.inventory.weapons) + len(a.inventory.consumables)
         loot_score = (1 - inv_load / 10.0) * max(0.0, 1 - d_loot / (self.world.width / 2))
-
 
         # 3) Flee utility
         flee_score = (1 - a.health / 100.0)
@@ -41,7 +86,7 @@ class Behavior:
 
         # 4) Boundary-hug utility
         dist_center = distance(a.pos, self.world.center)
-        radius      = self.storm.radius
+        radius = self.storm.radius
         boundary_score = 0.0
         if radius > 0:
             boundary_score = 1 - abs(dist_center - radius) / radius
@@ -60,7 +105,7 @@ class Behavior:
                 maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
                 miny = min(ys)
                 maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
-                center = ((minx+maxx)/2, (miny+maxy)/2)
+                center = ((minx + maxx) / 2, (miny + maxy) / 2)
                 d = distance(a.pos, center)
                 if d < min_bldg_dist:
                     min_bldg_dist = d
@@ -73,24 +118,32 @@ class Behavior:
         if self.world.in_building(a.pos) and a.inventory.weapons:
             ambush_score = 0.9
 
-        # Build scores dict **after** calculating all scores
         scores = {
-            'attack':   attack_score,
-            'loot':     loot_score,
-            'flee':     flee_score,
+            'attack': attack_score,
+            'loot': loot_score,
+            'flee': flee_score,
             'boundary': boundary_score,
-            'hide':     hide_score,
-            'ambush':   ambush_score,
-            'roam':     0.1
+            'hide': hide_score,
+            'ambush': ambush_score,
+            'roam': 0.1
         }
 
         action, _ = max(scores.items(), key=lambda kv: kv[1])
 
-        # Movement targets
+
+        # Smart door entry logic for loot
         if action == 'attack' and enemies:
             target = min(enemies, key=lambda e: distance(a.pos, e.pos)).pos
         elif action == 'loot' and visible_loot:
-            target = min(visible_loot, key=lambda it: distance(a.pos, it['pos']))['pos']
+            target_loot = min(visible_loot, key=lambda it: distance(a.pos, it['pos']))
+            loot_pos = target_loot['pos']
+            building = self.find_building_containing(loot_pos)
+            agent_inside = self.world.in_building(a.pos)
+            loot_inside = self.world.in_building(loot_pos)
+            if building and loot_inside and not agent_inside:
+                target = self.nearest_door(a.pos, building)
+            else:
+                target = loot_pos
         elif action == 'flee':
             target = self.world.center
         elif action == 'boundary':
@@ -103,8 +156,34 @@ class Behavior:
         elif action == 'hide' and nearest_building_center:
             target = nearest_building_center
         elif action == 'ambush':
-            target = a.pos
+            # Patrol randomly within the building every few seconds
+            building = self.find_building_containing(a.pos)
+            now = time.time()
+            if (
+                self.patrol_target is None or
+                distance(a.pos, self.patrol_target) < 5 or
+                (now - self.last_patrol_time) > 3.5
+            ):
+                if building:
+                    self.patrol_target = self.random_point_in_building(building)
+                    self.last_patrol_time = now
+                else:
+                    self.patrol_target = a.pos
+            target = self.patrol_target
         else:
             target = self.world.random_pos()
 
+        # --- Exit by door logic: if agent is inside, but target is outside, exit via door first ---
+        if (
+            self.world.in_building(a.pos) and
+            not self.world.in_building(target)
+        ):
+            building = self.find_building_containing(a.pos)
+            if building:
+                target = self.nearest_door(a.pos, building)
+
         return action, target
+
+
+
+
