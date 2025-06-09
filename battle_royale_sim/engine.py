@@ -108,10 +108,15 @@ class GameEngine:
         tex = self.grass_tex
         tw, th = tex.get_width(), tex.get_height()
         # optional: make a bit transparent
-        # tex.set_alpha(200)
+        tex.set_alpha(200)
         for x in range(0, int(self.world.width), tw):
             for y in range(0, int(self.world.height), th):
                 self.screen.blit(tex, (x, y))
+
+        # 2) Draw organic ponds
+        for poly in self.world.ponds:
+            pygame.draw.polygon(self.screen, (65,105,225), poly)
+
 
         # 2) Draw buildings (cover)
         # 2) Draw detailed buildings
