@@ -141,6 +141,8 @@ class GameEngine:
                 (int(x), int(y)),
                 5
             )
+            self.screen.blit(self.font.render(str(a.id),True,(255,255,0)),(x-5,y-20))
+
             # Health bar (red bg + green fg)
             hb_width = int((a.health / 100) * 10)
             pygame.draw.rect(
@@ -153,7 +155,6 @@ class GameEngine:
                 (0, 255, 0),
                 (int(x-5), int(y-12), hb_width, 2)
             )
-
         # 7) Storm circle
         cx, cy = self.world.center
         pygame.draw.circle(

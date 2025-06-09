@@ -1,13 +1,27 @@
+# config/storm.yaml
+
 phases:
-  - duration: 30    # seconds
+  - duration: 300   # 5 m 00s
     damage: 0
-  - duration: 20
+  - duration: 260   # 4 m 20s
     damage: 1
-  - duration: 15
+  - duration: 220   # 3 m 40s
     damage: 2
-  - duration: 10
+  - duration: 180   # 3 m 00s
     damage: 4
-  - duration:  8
+  - duration: 150   # 2 m 30s
     damage: 8
-  - duration:  5
+  - duration: 120   # 2 m 00s
     damage: 16
+  - duration: 100   # 1 m 40s
+    damage: 24
+  - duration:  80   # 1 m 20s
+    damage: 32
+  - duration:  60   # 1 m 00s
+    damage: 40
+  - duration:  50   # 0 m 50s
+    damage: 48
+  - duration:  40   # 0 m 40s
+    damage: 56
+  - duration:  35   # 0 m 35s
+    damage: 64
