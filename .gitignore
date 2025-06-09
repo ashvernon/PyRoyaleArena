@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 telemetry.json
 GitWorkflowCheatSheet.md
+make_floor.py
+make_grass.py
 EOF
