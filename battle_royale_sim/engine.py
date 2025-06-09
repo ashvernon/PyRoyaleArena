@@ -118,21 +118,39 @@ class GameEngine:
             pygame.draw.polygon(self.screen, (65,105,225), poly)
 
 
-        # 2) Draw buildings (cover)
-        # 2) Draw detailed buildings
+        # 2) Draw detailed buildings: shadows, two-tone walls, doors
         for b in self.world.buildings:
             # outer walls
             for w in b.get('walls', []):
-                pygame.draw.rect(self.screen, (80, 80, 80),
-                                 (w['x'], w['y'], w['width'], w['height']))
-            # doors
+                x, y, wdt, hgt = w['x'], w['y'], w['width'], w['height']
+
+                # Draw drop shadow (soft, slightly offset, semi-transparent)
+                shadow = pygame.Surface((wdt+6, hgt+6), pygame.SRCALPHA)
+                pygame.draw.rect(shadow, (0,0,0,60), (0,0,wdt+6,hgt+6), border_radius=4)
+                self.screen.blit(shadow, (x-3, y-3))
+
+                # Outer dark edge
+                pygame.draw.rect(self.screen, (70, 70, 70), (x, y, wdt, hgt))
+                # Slightly inset, lighter inner face
+                pad = 2
+                pygame.draw.rect(self.screen, (180, 180, 180), (x+pad, y+pad, wdt-2*pad, hgt-2*pad))
+
+            # doors (brown vertical gradient)
             for d in b.get('doors', []):
-                pygame.draw.rect(self.screen, (150, 75,  0),
-                                 (d['x'], d['y'], d['width'], d['height']))
-            # interior walls
+                x, y, wdt, hgt = d['x'], d['y'], d['width'], d['height']
+                for i in range(hgt):
+                    color = (
+                        120 + int(40 * i/hgt),  # redder at bottom
+                        80 + int(30 * i/hgt),   # greener at bottom
+                        40                      # low blue, brown
+                    )
+                    pygame.draw.line(self.screen, color, (x, y+i), (x+wdt, y+i))
+
+            # interior walls (simple medium gray)
             for i in b.get('interiors', []):
                 pygame.draw.rect(self.screen, (160, 160, 160),
                                  (i['x'], i['y'], i['width'], i['height']))
+
 
 
         # 3) Players remaining counter
