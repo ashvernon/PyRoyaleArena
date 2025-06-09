@@ -2,4 +2,5 @@ cat <<EOF > .gitignore
 __pycache__/
 *.pyc
 telemetry.json
+GitWorkflowCheatSheet.md
 EOF

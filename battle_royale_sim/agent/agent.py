@@ -63,6 +63,9 @@ class Agent:
             return None
 
         target = min(enemies, key=lambda a: distance(self.pos, a.pos))
+        # block shots that pass through walls
+        if not self.world.has_line_of_sight(self.pos, target.pos):
+            return None
         dist   = distance(self.pos, target.pos)
         if dist > weapon.range:
             return None
@@ -89,7 +92,10 @@ class Agent:
         dist   = distance(self.pos, target)
         if dist > 0:
             step = 2
-            self.pos = (
+            new_pos = (
                 self.pos[0] + dx / dist * step,
                 self.pos[1] + dy / dist * step
             )
+            # only commit move if not inside a wall
+            if not self.world.in_wall(new_pos):
+                self.pos = new_pos
