@@ -182,7 +182,9 @@ class Behavior:
             if building:
                 target = self.nearest_door(a.pos, building)
 
+        self.last_action = action
         return action, target
+
 
 
 

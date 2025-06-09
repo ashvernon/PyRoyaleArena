@@ -26,9 +26,11 @@ class GameEngine:
         self.world    = World(map_cfg)
         self.storm    = Storm(storm_cfg['phases'], self.world)
         self.spawner  = LootSpawner(loot_cfg, self.world)
+        
 
         # — Create agents —
         self.agents = []
+        self.selected_agent = None
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])
@@ -64,6 +66,17 @@ class GameEngine:
         running = True
         while running and len(self.agents) > 1:
             for e in pygame.event.get():
+                if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    mx, my = pygame.mouse.get_pos()
+                    found = False
+                    for agent in self.agents:
+                        # Adjust the radius if your agent circle is different
+                        if (agent.pos[0] - mx) ** 2 + (agent.pos[1] - my) ** 2 < 10 ** 2:
+                            self.selected_agent = agent
+                            found = True
+                            break
+                    if not found:
+                        self.selected_agent = None
                 if e.type == pygame.QUIT:
                     running = False
 
@@ -290,6 +303,30 @@ class GameEngine:
             text_surf = self.font.render(label, True, (255, 255, 255))
             self.screen.blit(text_surf, (lx + 18, ly))
             ly += 18
+
+        # Agent inspector
+        if self.selected_agent:
+            agent = self.selected_agent
+            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 150))
+            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 150), 2)
+            font = self.font
+            lines = [
+                f"Agent #{agent.id}",
+                f"Health: {int(agent.health)}",
+                f"Shield: {int(agent.shield)}",
+                f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",
+                f"Skill: {agent.skill:.2f}  Luck: {agent.luck:.2f}",
+                f"Last action: {getattr(agent.behavior, 'last_action', '?')}",
+                f"Inventory:",
+                f"  Weapons: " + ", ".join(getattr(w, 'name', str(w)) for w in agent.inventory.weapons) if agent.inventory.weapons else "  Weapons: (none)",
+                f"  Consumables: {len(agent.inventory.consumables)}"
+            ]
+            for i, text in enumerate(lines):
+                surf = font.render(text, True, (255, 255, 255))
+                self.screen.blit(surf, (28, 128 + i * 18))
+            # Highlight selected agent with a circle
+            pygame.draw.circle(self.screen, (255, 255, 0), (int(agent.pos[0]), int(agent.pos[1])), 9, 2)
+
 
         # 10) Flip display
         pygame.display.flip()
