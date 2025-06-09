@@ -2,6 +2,7 @@ import pygame
 import random
 import yaml
 import os
+import math
 from .constants            import TICK_RATE
 from .world                import World
 from .storm                import Storm
@@ -46,11 +47,14 @@ class GameEngine:
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
-        # load grass tile relative to this file’s folder
+        # load grass tile
         base_dir = os.path.dirname(__file__)
         asset_p = os.path.join(base_dir, "assets", "pygrass_tile.png")
         self.grass_tex = pygame.image.load(asset_p).convert()
 
+        # load floor tile 
+        floor_asset_p = os.path.join(base_dir, "assets", "pyfloor_tile_32.png")
+        self.floor_tex = pygame.image.load(floor_asset_p).convert()
 
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
@@ -105,10 +109,12 @@ class GameEngine:
 
     def render(self):
         # 1) Textured grass background (tile the grass texture)
+
         tex = self.grass_tex
         tw, th = tex.get_width(), tex.get_height()
         # optional: make a bit transparent
         tex.set_alpha(200)
+
         for x in range(0, int(self.world.width), tw):
             for y in range(0, int(self.world.height), th):
                 self.screen.blit(tex, (x, y))
@@ -118,8 +124,37 @@ class GameEngine:
             pygame.draw.polygon(self.screen, (65,105,225), poly)
 
 
-        # 2) Draw detailed buildings: shadows, two-tone walls, doors
+
+        # 2) Draw detailed buildings: shadows, two-tone walls, doors, textured floor in building interiors
         for b in self.world.buildings:
+            # Compute bounds of the exterior rectangle from outer wall segments only
+            xs = [w['x'] for w in b.get('walls',[])]
+            ws = [w['width'] for w in b.get('walls',[])]
+            ys = [w['y'] for w in b.get('walls',[])]
+            hs = [w['height'] for w in b.get('walls',[])]
+            minx = min(xs)
+            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
+            miny = min(ys)
+            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+
+
+            fw, fh = self.floor_tex.get_width(), self.floor_tex.get_height()
+            for fx in range(minx, maxx, fw):
+                for fy in range(miny, maxy, fh):
+                    # Calculate width and height to draw (crop if at the edge)
+                    draw_w = min(fw, maxx - fx)
+                    draw_h = min(fh, maxy - fy)
+                    if draw_w < fw or draw_h < fh:
+                        # Crop the texture for the edge
+                        sub = self.floor_tex.subsurface((0, 0, draw_w, draw_h))
+                        self.screen.blit(sub, (fx, fy))
+                    else:
+                        self.screen.blit(self.floor_tex, (fx, fy))
+
+
+
+
+            
             # outer walls
             for w in b.get('walls', []):
                 x, y, wdt, hgt = w['x'], w['y'], w['width'], w['height']
@@ -150,7 +185,6 @@ class GameEngine:
             for i in b.get('interiors', []):
                 pygame.draw.rect(self.screen, (160, 160, 160),
                                  (i['x'], i['y'], i['width'], i['height']))
-
 
 
         # 3) Players remaining counter
