@@ -115,17 +115,27 @@ class GameEngine:
         self.screen.blit(counter_surf, (10, 10))
 
         # 4) Storm-cycle timer
-        phase = self.storm.phases[self.storm.current_phase]
-        ticks_elapsed = self.storm.ticks_in_phase
-        ticks_total   = phase['duration'] * TICK_RATE
-        ticks_left    = max(0, ticks_total - ticks_elapsed)
-        secs_left     = ticks_left // TICK_RATE
-        timer_surf = self.font.render(
-            f"Next shrink in: {secs_left}s",
-            True,
-            (255, 255, 255)
-        )
+        phase        = self.storm.phases[self.storm.current_phase]
+        ticks        = self.storm.ticks_in_phase
+        hold_ticks   = phase['hold']   * TICK_RATE
+        shrink_ticks = phase['shrink'] * TICK_RATE
+
+        if ticks <= hold_ticks:
+            # still holding radius
+            secs_left = (hold_ticks - ticks) // TICK_RATE
+            label     = f"Holding: {secs_left}s"
+        else:
+            # currently shrinking
+            elapsed_shrink = ticks - hold_ticks
+            if elapsed_shrink <= shrink_ticks:
+                secs_left = (shrink_ticks - elapsed_shrink) // TICK_RATE
+            else:
+                secs_left = 0
+            label = f"Shrinking: {secs_left}s"
+
+        timer_surf = self.font.render(label, True, (255, 255, 255))
         self.screen.blit(timer_surf, (10, 30))
+
 
         # 5) Loot items
         for item in self.loot_items:
