@@ -19,10 +19,20 @@ class Behavior:
             attack_score = (a.health / 100.0) * max(0.0, 1 - d_enemy / a.inventory.weapons[0].range)
 
         # 2) Loot utility
-        loot_dists = [distance(a.pos, it['pos']) for it in loot_items]
+        # Only consider loot boxes the agent could "notice" nearby
+        LOOT_SENSE_RADIUS = 60  # px, tweak as needed
+
+        visible_loot = [
+            it for it in loot_items
+            if distance(a.pos, it['pos']) < LOOT_SENSE_RADIUS
+            # optionally: and self.world.has_line_of_sight(a.pos, it['pos'])
+        ]
+
+        loot_dists = [distance(a.pos, it['pos']) for it in visible_loot]
         d_loot = min(loot_dists, default=math.inf)
         inv_load = len(a.inventory.weapons) + len(a.inventory.consumables)
         loot_score = (1 - inv_load / 10.0) * max(0.0, 1 - d_loot / (self.world.width / 2))
+
 
         # 3) Flee utility
         flee_score = (1 - a.health / 100.0)
@@ -79,8 +89,8 @@ class Behavior:
         # Movement targets
         if action == 'attack' and enemies:
             target = min(enemies, key=lambda e: distance(a.pos, e.pos)).pos
-        elif action == 'loot' and loot_items:
-            target = min(loot_items, key=lambda it: distance(a.pos, it['pos']))['pos']
+        elif action == 'loot' and visible_loot:
+            target = min(visible_loot, key=lambda it: distance(a.pos, it['pos']))['pos']
         elif action == 'flee':
             target = self.world.center
         elif action == 'boundary':
