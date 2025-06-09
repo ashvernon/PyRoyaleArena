@@ -91,11 +91,16 @@ class Agent:
         dx, dy = target[0] - self.pos[0], target[1] - self.pos[1]
         dist   = distance(self.pos, target)
         if dist > 0:
-            step = 2
+            base_step = 2
+            # slow down in water
+            if self.world.is_in_water(self.pos):
+                step = base_step * 0.5
+            else:
+                step = base_step
             new_pos = (
                 self.pos[0] + dx / dist * step,
                 self.pos[1] + dy / dist * step
             )
-            # only commit move if not inside a wall
+            # only move if not colliding a wall
             if not self.world.in_wall(new_pos):
                 self.pos = new_pos
