@@ -1,6 +1,7 @@
 import pygame
 import random
 import yaml
+import os
 from .constants            import TICK_RATE
 from .world                import World
 from .storm                import Storm
@@ -45,6 +46,12 @@ class GameEngine:
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
+        # load grass tile relative to this file’s folder
+        base_dir = os.path.dirname(__file__)
+        asset_p = os.path.join(base_dir, "assets", "pygrass_tile.png")
+        self.grass_tex = pygame.image.load(asset_p).convert()
+
+
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
 
@@ -97,8 +104,14 @@ class GameEngine:
                 self.agents.remove(a)
 
     def render(self):
-        # 1) Background
-        self.screen.fill((34, 139, 34))
+        # 1) Textured grass background (tile the grass texture)
+        tex = self.grass_tex
+        tw, th = tex.get_width(), tex.get_height()
+        # optional: make a bit transparent
+        # tex.set_alpha(200)
+        for x in range(0, int(self.world.width), tw):
+            for y in range(0, int(self.world.height), th):
+                self.screen.blit(tex, (x, y))
 
         # 2) Draw buildings (cover)
         # 2) Draw detailed buildings
