@@ -11,10 +11,14 @@ from .telemetry            import flush, log_event
 class GameEngine:
     def __init__(self):
         # — Load configs —
-        map_cfg    = yaml.safe_load(open('config/map.yaml'))
-        storm_cfg  = yaml.safe_load(open('config/storm.yaml'))
-        loot_cfg   = yaml.safe_load(open('config/loot_table.yaml'))
-        agents_cfg = yaml.safe_load(open('config/agents.yaml'))
+        map_cfg     = yaml.safe_load(open('config/map.yaml'))
+        buildings_cfg = yaml.safe_load(open('config/buildings.yaml'))
+        storm_cfg   = yaml.safe_load(open('config/storm.yaml'))
+        loot_cfg    = yaml.safe_load(open('config/loot_table.yaml'))
+        agents_cfg  = yaml.safe_load(open('config/agents.yaml'))
+
+        # merge buildings into world config
+        map_cfg['buildings'] = buildings_cfg.get('buildings', [])
 
         # — Init subsystems —
         self.world    = World(map_cfg)
@@ -94,7 +98,12 @@ class GameEngine:
         # 1) Background
         self.screen.fill((34, 139, 34))
 
-        # 2) Players remaining counter
+        # 2) Draw buildings (cover)
+        for b in self.world.buildings:
+            rect = pygame.Rect(b['x'], b['y'], b['width'], b['height'])
+            pygame.draw.rect(self.screen, (100, 100, 100), rect)
+
+        # 3) Players remaining counter
         remaining = len(self.agents)
         counter_surf = self.font.render(
             f"{remaining} / {self.total_agents}",
@@ -103,7 +112,7 @@ class GameEngine:
         )
         self.screen.blit(counter_surf, (10, 10))
 
-        # 3) Storm-cycle timer
+        # 4) Storm-cycle timer
         phase = self.storm.phases[self.storm.current_phase]
         ticks_elapsed  = self.storm.ticks_in_phase
         ticks_total    = phase['duration'] * TICK_RATE
@@ -116,13 +125,13 @@ class GameEngine:
         )
         self.screen.blit(timer_surf, (10, 30))
 
-        # 4) Loot items
+        # 5) Loot items
         for item in self.loot_items:
             col = (255, 215, 0) if item['type'] == 'weapon' else (0, 255, 255)
             x, y = item['pos']
             pygame.draw.rect(self.screen, col, (int(x-3), int(y-3), 6, 6))
 
-        # 5) Agents + health bars
+        # 6) Agents + health bars
         for a in self.agents:
             x, y = a.pos
             # Agent circle
@@ -145,7 +154,7 @@ class GameEngine:
                 (int(x-5), int(y-12), hb_width, 2)
             )
 
-        # 6) Storm circle
+        # 7) Storm circle
         cx, cy = self.world.center
         pygame.draw.circle(
             self.screen,
@@ -155,7 +164,7 @@ class GameEngine:
             2
         )
 
-        # 7) Shot visuals
+        # 8) Shot visuals
         for start, end in self.shots:
             pygame.draw.line(
                 self.screen,
@@ -165,5 +174,5 @@ class GameEngine:
                 1
             )
 
-        # 8) Flip display
+        # 9) Flip display
         pygame.display.flip()
