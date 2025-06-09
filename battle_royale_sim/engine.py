@@ -58,9 +58,15 @@ class GameEngine:
         # 1) Storm
         self.storm.update()
 
-        # 2) Spawn loot occasionally
-        if random.random() < 0.1:
-            self.loot_items.extend(self.spawner.spawn_loot())
+        # 2) Spawn loot occasionally, but only inside the safe zone
+        if random.random() < 0.05:
+            new_loot = self.spawner.spawn_loot()
+            # keep only those within the storm’s safe circle
+            inside = [
+                it for it in new_loot
+                if self.storm.in_safe_zone(it['pos'])
+            ]
+            self.loot_items.extend(inside)
 
         # 3) Move, loot pickup, storm damage & preliminary elimination
         for a in self.agents[:]:
