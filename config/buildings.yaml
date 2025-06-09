@@ -48,3 +48,72 @@ buildings:
       - {x: 645, y: 120, width: 10,  height: 5}
     interiors:
       - {x: 645, y: 155, width: 50,  height: 5}
+
+  - walls:
+      - {x: 800, y: 100, width: 60, height: 5}
+      - {x: 800, y: 100, width: 5, height: 120}
+      - {x: 800, y: 215, width: 60, height: 5}
+      - {x: 855, y: 100, width: 5, height: 120}
+    doors:
+      - {x: 825, y: 100, width: 10, height: 5}
+      - {x: 850, y: 215, width: 10, height: 5}
+    interiors:
+      - {x: 825, y: 150, width: 20, height: 5}
+
+  - walls:
+      - {x: 700, y: 700, width: 120, height: 5}
+      - {x: 700, y: 700, width: 5, height: 60}
+      - {x: 700, y: 755, width: 80, height: 5}
+      - {x: 775, y: 700, width: 5, height: 60}
+      - {x: 745, y: 755, width: 60, height: 5}
+      - {x: 805, y: 700, width: 5, height: 60}
+    doors:
+      - {x: 735, y: 700, width: 10, height: 5}
+      - {x: 745, y: 755, width: 10, height: 5}
+    interiors:
+      - {x: 730, y: 725, width: 30, height: 5}
+      - {x: 760, y: 725, width: 30, height: 5}
+
+  - walls:
+      - {x: 250, y: 750, width: 150, height: 5}
+      - {x: 250, y: 750, width: 5, height: 60}
+      - {x: 250, y: 805, width: 150, height: 5}
+      - {x: 395, y: 750, width: 5, height: 60}
+    doors:
+      - {x: 320, y: 750, width: 10, height: 5}
+    interiors:
+      - {x: 320, y: 780, width: 60, height: 5}
+
+  - walls:
+      - {x: 480, y: 600, width: 80, height: 5}
+      - {x: 480, y: 600, width: 5, height: 80}
+      - {x: 480, y: 675, width: 80, height: 5}
+      - {x: 555, y: 600, width: 5, height: 80}
+      - {x: 515, y: 635, width: 40, height: 5}
+    doors:
+      - {x: 515, y: 600, width: 10, height: 5}
+      - {x: 550, y: 675, width: 10, height: 5}
+    interiors:
+      - {x: 515, y: 645, width: 20, height: 5}
+
+  - walls:
+      - {x: 850, y: 850, width: 40, height: 5}
+      - {x: 850, y: 850, width: 5, height: 40}
+      - {x: 850, y: 885, width: 40, height: 5}
+      - {x: 885, y: 850, width: 5, height: 40}
+    doors:
+      - {x: 860, y: 850, width: 10, height: 5}
+    interiors:
+      - {x: 860, y: 870, width: 20, height: 5}
+
+  - walls:
+      - {x: 100, y: 850, width: 60, height: 5}
+      - {x: 100, y: 850, width: 5, height: 40}
+      - {x: 100, y: 885, width: 60, height: 5}
+      - {x: 155, y: 850, width: 5, height: 40}
+      - {x: 130, y: 870, width: 35, height: 5}
+    doors:
+      - {x: 130, y: 850, width: 10, height: 5}
+      - {x: 145, y: 885, width: 10, height: 5}
+    interiors:
+      - {x: 130, y: 860, width: 20, height: 5}
