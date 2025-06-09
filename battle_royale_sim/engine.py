@@ -41,6 +41,7 @@ class GameEngine:
         pygame.init()
         pygame.font.init()
         self.font   = pygame.font.SysFont(None, 24)
+        self.id_font = pygame.font.SysFont(None, 14)   # smaller size for IDs
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
@@ -138,7 +139,7 @@ class GameEngine:
             # Agent circle
             pygame.draw.circle(self.screen, (0, 0, 255), (int(x), int(y)), 5)
             # ID above agent
-            id_surf = self.font.render(str(a.id), True, (255, 255, 0))
+            id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
             self.screen.blit(id_surf, (int(x-5), int(y-20)))
             # Health bar (red bg + green fg)
             hb_width = int((a.health / 100) * 10)
