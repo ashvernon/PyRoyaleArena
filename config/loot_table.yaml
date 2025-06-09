@@ -1,0 +1,37 @@
+weapons:
+  pistol:
+    spawn_chance: 0.20
+    damage: 20
+    fire_rate: 1.0
+    accuracy: 0.6
+    range: 150
+    magazine_size: 6
+    reload_time: 1.5
+
+  rifle:
+    spawn_chance: 0.10
+    damage: 35
+    fire_rate: 0.50
+    accuracy: 0.8
+    range: 250
+    magazine_size: 5
+    reload_time: 2.0
+
+consumables:
+  medkit:
+    spawn_chance: 0.05
+    heal_amount: 50
+
+  shield:
+    spawn_chance: 0.05
+    shield_amount: 50
+
+materials:
+  wood:
+    spawn_chance: 0.10
+
+  stone:
+    spawn_chance: 0.10
+
+  metal:
+    spawn_chance: 0.05

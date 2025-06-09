@@ -1,0 +1,4 @@
+count: 50
+
+skill_range: [0.2, 0.8]   # each agent’s aiming/build speed
+luck_range:  [0.1, 0.5]   # RNG bias for loot & crits
