@@ -38,6 +38,7 @@ class GameEngine:
         self.loot_items   = []
         self.shots        = []   # [(start_pos, end_pos), ...]
         self.total_agents = len(self.agents)
+        self.loot_items   = self.spawner.spawn_initial_loot()
 
         # — Pygame setup —
         pygame.init()
@@ -53,7 +54,7 @@ class GameEngine:
         self.grass_tex = pygame.image.load(asset_p).convert()
 
         # load floor tile 
-        floor_asset_p = os.path.join(base_dir, "assets", "pyfloor_tile_32.png")
+        floor_asset_p = os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")
         self.floor_tex = pygame.image.load(floor_asset_p).convert()
 
         pygame.display.set_caption("Battle Royale Simulation")
