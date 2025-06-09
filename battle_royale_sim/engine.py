@@ -29,11 +29,14 @@ class GameEngine:
             self.agents.append(Agent(i, s, l, self.world, self.storm))
 
         # — State holders —
-        self.loot_items = []
-        self.shots      = []  # [(start_pos, end_pos), ...]
+        self.loot_items   = []
+        self.shots        = []  # [(start_pos, end_pos), ...]
+        self.total_agents = len(self.agents)
 
         # — Pygame setup —
         pygame.init()
+        pygame.font.init()
+        self.font   = pygame.font.SysFont(None, 24)
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
@@ -61,7 +64,6 @@ class GameEngine:
         # 2) Spawn loot occasionally, but only inside the safe zone
         if random.random() < 0.05:
             new_loot = self.spawner.spawn_loot()
-            # keep only those within the storm’s safe circle
             inside = [
                 it for it in new_loot
                 if self.storm.in_safe_zone(it['pos'])
@@ -92,13 +94,35 @@ class GameEngine:
         # 1) Background
         self.screen.fill((34, 139, 34))
 
-        # 2) Loot items
+        # 2) Players remaining counter
+        remaining = len(self.agents)
+        counter_surf = self.font.render(
+            f"{remaining} / {self.total_agents}",
+            True,
+            (255, 255, 255)
+        )
+        self.screen.blit(counter_surf, (10, 10))
+
+        # 3) Storm-cycle timer
+        phase = self.storm.phases[self.storm.current_phase]
+        ticks_elapsed  = self.storm.ticks_in_phase
+        ticks_total    = phase['duration'] * TICK_RATE
+        ticks_left     = max(0, ticks_total - ticks_elapsed)
+        secs_left      = ticks_left // TICK_RATE
+        timer_surf = self.font.render(
+            f"Next shrink in: {secs_left}s",
+            True,
+            (255, 255, 255)
+        )
+        self.screen.blit(timer_surf, (10, 30))
+
+        # 4) Loot items
         for item in self.loot_items:
             col = (255, 215, 0) if item['type'] == 'weapon' else (0, 255, 255)
             x, y = item['pos']
             pygame.draw.rect(self.screen, col, (int(x-3), int(y-3), 6, 6))
 
-        # 3) Agents + health bars
+        # 5) Agents + health bars
         for a in self.agents:
             x, y = a.pos
             # Agent circle
@@ -121,7 +145,7 @@ class GameEngine:
                 (int(x-5), int(y-12), hb_width, 2)
             )
 
-        # 4) Storm circle
+        # 6) Storm circle
         cx, cy = self.world.center
         pygame.draw.circle(
             self.screen,
@@ -131,7 +155,7 @@ class GameEngine:
             2
         )
 
-        # 5) Shot visuals
+        # 7) Shot visuals
         for start, end in self.shots:
             pygame.draw.line(
                 self.screen,
@@ -141,5 +165,5 @@ class GameEngine:
                 1
             )
 
-        # 6) Flip display
+        # 8) Flip display
         pygame.display.flip()
