@@ -174,5 +174,23 @@ class GameEngine:
                 1
             )
 
-        # 9) Flip display
+        # 9) UI Legend
+        legend_items = [
+            ("Weapon",     (255, 215,   0), "rect"),
+            ("Consumable", (  0, 255, 255), "rect"),
+            ("Building",   (100, 100, 100), "rect"),
+            ("Agent",      (  0,   0, 255), "circle"),
+        ]
+        lx, ly = 10, 50
+        for label, color, shape in legend_items:
+            if shape == "rect":
+                pygame.draw.rect(self.screen, color, (lx, ly, 12, 12))
+            else:
+                pygame.draw.circle(self.screen, color, (lx + 6, ly + 6), 6)
+            text_surf = self.font.render(label, True, (255, 255, 255))
+            self.screen.blit(text_surf, (lx + 18, ly))
+            ly += 18
+
+        # 10) Flip display
         pygame.display.flip()
+
