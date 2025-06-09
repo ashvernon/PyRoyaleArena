@@ -41,6 +41,7 @@ class GameEngine:
         pygame.init()
         pygame.font.init()
         self.font   = pygame.font.SysFont(None, 24)
+        self.id_font = pygame.font.SysFont(None, 14)   # smaller size for IDs
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
@@ -131,7 +132,7 @@ class GameEngine:
             x, y = item['pos']
             pygame.draw.rect(self.screen, col, (int(x-3), int(y-3), 6, 6))
 
-        # 6) Agents + health bars
+        # 6) Agents + health bars + ID
         for a in self.agents:
             x, y = a.pos
             # Agent circle
@@ -141,29 +142,32 @@ class GameEngine:
                 (int(x), int(y)),
                 5
             )
-            self.screen.blit(self.font.render(str(a.id),True,(255,255,0)),(x-5,y-20))
+
+            # ID above agent (using smaller font)
+            id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
+            self.screen.blit(id_surf, (int(x - 5), int(y - 20)))
 
             # Health bar (red bg + green fg)
             hb_width = int((a.health / 100) * 10)
             pygame.draw.rect(
                 self.screen,
                 (255, 0, 0),
-                (int(x-5), int(y-12), 10, 2)
+                (int(x - 5), int(y - 12), 10, 2)
             )
             pygame.draw.rect(
                 self.screen,
                 (0, 255, 0),
-                (int(x-5), int(y-12), hb_width, 2)
+                (int(x - 5), int(y - 12), hb_width, 2)
             )
-        # 7) Storm circle
-        cx, cy = self.world.center
-        pygame.draw.circle(
-            self.screen,
-            (0, 0, 0),
-            (int(cx), int(cy)),
-            int(self.storm.radius),
-            2
-        )
+            # 7) Storm circle
+            cx, cy = self.world.center
+            pygame.draw.circle(
+                self.screen,
+                (0, 0, 0),
+                (int(cx), int(cy)),
+                int(self.storm.radius),
+                2
+            )
 
         # 8) Shot visuals
         for start, end in self.shots:
