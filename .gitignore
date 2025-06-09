@@ -5,4 +5,6 @@ telemetry.json
 GitWorkflowCheatSheet.md
 make_floor.py
 make_grass.py
+make_floor_wood_dark.py
+make_floor_wood_light.py
 EOF
