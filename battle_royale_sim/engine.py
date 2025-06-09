@@ -11,11 +11,11 @@ from .telemetry            import flush, log_event
 class GameEngine:
     def __init__(self):
         # — Load configs —
-        map_cfg     = yaml.safe_load(open('config/map.yaml'))
-        buildings_cfg = yaml.safe_load(open('config/buildings.yaml'))
-        storm_cfg   = yaml.safe_load(open('config/storm.yaml'))
-        loot_cfg    = yaml.safe_load(open('config/loot_table.yaml'))
-        agents_cfg  = yaml.safe_load(open('config/agents.yaml'))
+        map_cfg        = yaml.safe_load(open('config/map.yaml'))
+        buildings_cfg  = yaml.safe_load(open('config/buildings.yaml'))
+        storm_cfg      = yaml.safe_load(open('config/storm.yaml'))
+        loot_cfg       = yaml.safe_load(open('config/loot_table.yaml'))
+        agents_cfg     = yaml.safe_load(open('config/agents.yaml'))
 
         # merge buildings into world config
         map_cfg['buildings'] = buildings_cfg.get('buildings', [])
@@ -34,7 +34,7 @@ class GameEngine:
 
         # — State holders —
         self.loot_items   = []
-        self.shots        = []  # [(start_pos, end_pos), ...]
+        self.shots        = []   # [(start_pos, end_pos), ...]
         self.total_agents = len(self.agents)
 
         # — Pygame setup —
@@ -74,21 +74,22 @@ class GameEngine:
             ]
             self.loot_items.extend(inside)
 
-        # 3) Move, loot pickup, storm damage & preliminary elimination
+        # 3) Agent actions: decide, move/attack, pickup, storm damage & elimination
         for a in self.agents[:]:
-            a.tick(self.loot_items)
+            # tick now accepts both agents list and loot_items
+            a.tick(self.agents, self.loot_items)
             if a.health <= 0:
                 log_event('eliminate', {'agent': a.id})
                 self.agents.remove(a)
 
-        # 4) Combat: each agent attempts to fire
+        # 4) Combat: collect shot visuals
         self.shots = []
-        for a in self.agents[:]:
+        for a in self.agents:
             shot = a.attack(self.agents)
             if shot:
                 self.shots.append(shot)
 
-        # 5) Post-combat elimination
+        # 5) Post-combat elimination (in case attack killed someone)
         for a in self.agents[:]:
             if a.health <= 0:
                 log_event('eliminate', {'agent': a.id})
@@ -114,10 +115,10 @@ class GameEngine:
 
         # 4) Storm-cycle timer
         phase = self.storm.phases[self.storm.current_phase]
-        ticks_elapsed  = self.storm.ticks_in_phase
-        ticks_total    = phase['duration'] * TICK_RATE
-        ticks_left     = max(0, ticks_total - ticks_elapsed)
-        secs_left      = ticks_left // TICK_RATE
+        ticks_elapsed = self.storm.ticks_in_phase
+        ticks_total   = phase['duration'] * TICK_RATE
+        ticks_left    = max(0, ticks_total - ticks_elapsed)
+        secs_left     = ticks_left // TICK_RATE
         timer_surf = self.font.render(
             f"Next shrink in: {secs_left}s",
             True,
@@ -131,39 +132,22 @@ class GameEngine:
             x, y = item['pos']
             pygame.draw.rect(self.screen, col, (int(x-3), int(y-3), 6, 6))
 
-        # 6) Agents + health bars
+        # 6) Agents + health bars + ID
         for a in self.agents:
             x, y = a.pos
             # Agent circle
-            pygame.draw.circle(
-                self.screen,
-                (0, 0, 255),
-                (int(x), int(y)),
-                5
-            )
-            self.screen.blit(self.font.render(str(a.id),True,(255,255,0)),(x-5,y-20))
-
+            pygame.draw.circle(self.screen, (0, 0, 255), (int(x), int(y)), 5)
+            # ID above agent
+            id_surf = self.font.render(str(a.id), True, (255, 255, 0))
+            self.screen.blit(id_surf, (int(x-5), int(y-20)))
             # Health bar (red bg + green fg)
             hb_width = int((a.health / 100) * 10)
-            pygame.draw.rect(
-                self.screen,
-                (255, 0, 0),
-                (int(x-5), int(y-12), 10, 2)
-            )
-            pygame.draw.rect(
-                self.screen,
-                (0, 255, 0),
-                (int(x-5), int(y-12), hb_width, 2)
-            )
+            pygame.draw.rect(self.screen, (255, 0, 0), (int(x-5), int(y-12), 10, 2))
+            pygame.draw.rect(self.screen, (0, 255, 0), (int(x-5), int(y-12), hb_width, 2))
+
         # 7) Storm circle
         cx, cy = self.world.center
-        pygame.draw.circle(
-            self.screen,
-            (0, 0, 0),
-            (int(cx), int(cy)),
-            int(self.storm.radius),
-            2
-        )
+        pygame.draw.circle(self.screen, (0, 0, 0), (int(cx), int(cy)), int(self.storm.radius), 2)
 
         # 8) Shot visuals
         for start, end in self.shots:
@@ -171,7 +155,7 @@ class GameEngine:
                 self.screen,
                 (255, 0, 0),
                 (int(start[0]), int(start[1])),
-                (int(end[0]),   int(end[1])),
+                (int(end[0]), int(end[1])),
                 1
             )
 
@@ -194,4 +178,3 @@ class GameEngine:
 
         # 10) Flip display
         pygame.display.flip()
-
