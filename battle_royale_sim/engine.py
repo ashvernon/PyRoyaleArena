@@ -67,6 +67,12 @@ class GameEngine:
         agent_asset_p = os.path.join(base_dir, "assets", "agent_sprite.png")
         self.agent_sprite = pygame.image.load(agent_asset_p).convert_alpha()
 
+        # a full‐screen, per‐pixel‐alpha surface
+        self.overlay = pygame.Surface(
+            (int(self.world.width), int(self.world.height)),
+            pygame.SRCALPHA
+        ).convert_alpha()
+
             # — LOAD SCATTERABLE ASSETS —
         def load_all(subdir):
             path = os.path.join(base_dir, "assets", subdir)
@@ -253,6 +259,8 @@ class GameEngine:
                                  (i['x'], i['y'], i['width'], i['height']))
 
 
+
+
         # 3) Players remaining counter
         remaining = len(self.agents)
         counter_surf = self.font.render(
@@ -305,30 +313,51 @@ class GameEngine:
 
 
             # ID above agent (using smaller font)
-            id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
-            self.screen.blit(id_surf, (int(x - 5), int(y - 20)))
+            # id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
+            # self.screen.blit(id_surf, (int(x - 5), int(y - 20)))
 
             # Health bar (red bg + green fg)
             hb_width = int((a.health / 100) * 10)
             pygame.draw.rect(
                 self.screen,
                 (255, 0, 0),
-                (int(x - 5), int(y - 12), 10, 2)
+                (int(x - 5), int(y - 20), 10, 2)
             )
             pygame.draw.rect(
                 self.screen,
                 (0, 255, 0),
-                (int(x - 5), int(y - 12), hb_width, 2)
+                (int(x - 5), int(y - 20), hb_width, 2)
             )
+
             # 7) Storm circle
+
+            # Compute safe‐zone center & radius up front
             cx, cy = self.world.center
+            radius = int(self.storm.radius)
+
+            # # — Grey out outside the safe zone —
+            # overlay = pygame.Surface(
+            #     (int(self.world.width), int(self.world.height)),
+            #     pygame.SRCALPHA
+            # )
+            # overlay.fill((128, 128, 128, 150))
+            # pygame.draw.circle(
+            #     overlay,
+            #     (0, 0, 0, 0),       # cut a transparent hole
+            #     (cx, cy),
+            #     radius
+            # )
+            # self.screen.blit(overlay, (0, 0))
+
+            # (Re)draw storm border on top
             pygame.draw.circle(
                 self.screen,
-                (0, 0, 0),
-                (int(cx), int(cy)),
-                int(self.storm.radius),
+                (255, 255, 255),
+                (cx, cy),
+                radius,
                 2
             )
+
 
         # 8) Shot visuals
         for start, end in self.shots:
@@ -339,6 +368,32 @@ class GameEngine:
                 (int(end[0]), int(end[1])),
                 1
             )
+
+        # — GREY OUTSIDE THE SAFE ZONE —  
+        cx, cy = int(self.world.center[0]), int(self.world.center[1])
+        radius = int(self.storm.radius)
+
+        # reuse overlay Surface created in __init__
+        self.overlay.fill((50, 50, 50, 150))    # semi-transparent grey
+        pygame.draw.circle(
+            self.overlay,
+            (0, 0, 0, 0),                      # 0 alpha = punch-through
+            (cx, cy),
+            radius
+        )
+        self.screen.blit(self.overlay, (0, 0))
+
+        # redraw storm border on top
+        pygame.draw.circle(
+            self.screen,
+            (255, 255, 255),
+            (cx, cy),
+            radius,
+            2
+        )
+
+
+
 
         # 9) UI Legend
         legend_items = [
