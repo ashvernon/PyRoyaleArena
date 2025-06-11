@@ -26,18 +26,25 @@ class GameEngine:
         self.world    = World(map_cfg)
         self.storm    = Storm(storm_cfg['phases'], self.world)
         self.spawner  = LootSpawner(loot_cfg, self.world)
+        
 
         # — Create agents —
         self.agents = []
+        self.selected_agent = None
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])
-            self.agents.append(Agent(i, s, l, self.world, self.storm))
+            # Generate color: use HSL for spread
+            color = pygame.Color(0)
+            color.hsva = (int(360 * i / agents_cfg['count']), 90, 90, 100)
+            rgb = (color.r, color.g, color.b)
+            self.agents.append(Agent(i, s, l, self.world, self.storm, rgb))
 
         # — State holders —
         self.loot_items   = []
         self.shots        = []   # [(start_pos, end_pos), ...]
         self.total_agents = len(self.agents)
+        self.loot_items   = self.spawner.spawn_initial_loot()
 
         # — Pygame setup —
         pygame.init()
@@ -53,8 +60,12 @@ class GameEngine:
         self.grass_tex = pygame.image.load(asset_p).convert()
 
         # load floor tile 
-        floor_asset_p = os.path.join(base_dir, "assets", "pyfloor_tile_32.png")
+        floor_asset_p = os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")
         self.floor_tex = pygame.image.load(floor_asset_p).convert()
+
+        base_dir = os.path.dirname(__file__)
+        agent_asset_p = os.path.join(base_dir, "assets", "agent_sprite.png")
+        self.agent_sprite = pygame.image.load(agent_asset_p).convert_alpha()
 
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
@@ -63,6 +74,17 @@ class GameEngine:
         running = True
         while running and len(self.agents) > 1:
             for e in pygame.event.get():
+                if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    mx, my = pygame.mouse.get_pos()
+                    found = False
+                    for agent in self.agents:
+                        # Adjust the radius if your agent circle is different
+                        if (agent.pos[0] - mx) ** 2 + (agent.pos[1] - my) ** 2 < 10 ** 2:
+                            self.selected_agent = agent
+                            found = True
+                            break
+                    if not found:
+                        self.selected_agent = None
                 if e.type == pygame.QUIT:
                     running = False
 
@@ -228,14 +250,15 @@ class GameEngine:
         # 6) Agents + health bars + ID
         for a in self.agents:
             x, y = a.pos
-            # Agent circle
 
-            pygame.draw.circle(
-                self.screen,
-                (0, 0, 255),
-                (int(x), int(y)),
-                5
-            )
+            # Tint the sprite
+            sprite = self.agent_sprite.copy()
+            tint = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            tint.fill((*a.color, 255))
+            sprite.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            self.screen.blit(sprite, (int(x - sprite.get_width() // 2), int(y - sprite.get_height() // 2)))
+
+
 
             # ID above agent (using smaller font)
             id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
@@ -289,6 +312,30 @@ class GameEngine:
             text_surf = self.font.render(label, True, (255, 255, 255))
             self.screen.blit(text_surf, (lx + 18, ly))
             ly += 18
+
+        # Agent inspector
+        if self.selected_agent:
+            agent = self.selected_agent
+            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 150))
+            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 150), 2)
+            font = self.font
+            lines = [
+                f"Agent #{agent.id}",
+                f"Health: {int(agent.health)}",
+                f"Shield: {int(agent.shield)}",
+                f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",
+                f"Skill: {agent.skill:.2f}  Luck: {agent.luck:.2f}",
+                f"Last action: {getattr(agent.behavior, 'last_action', '?')}",
+                f"Inventory:",
+                f"  Weapons: " + ", ".join(getattr(w, 'name', str(w)) for w in agent.inventory.weapons) if agent.inventory.weapons else "  Weapons: (none)",
+                f"  Consumables: {len(agent.inventory.consumables)}"
+            ]
+            for i, text in enumerate(lines):
+                surf = font.render(text, True, (255, 255, 255))
+                self.screen.blit(surf, (28, 128 + i * 18))
+            # Highlight selected agent with a circle
+            pygame.draw.circle(self.screen, (255, 255, 0), (int(agent.pos[0]), int(agent.pos[1])), 9, 2)
+
 
         # 10) Flip display
         pygame.display.flip()
