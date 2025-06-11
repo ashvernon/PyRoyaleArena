@@ -67,6 +67,33 @@ class GameEngine:
         agent_asset_p = os.path.join(base_dir, "assets", "agent_sprite.png")
         self.agent_sprite = pygame.image.load(agent_asset_p).convert_alpha()
 
+            # — LOAD SCATTERABLE ASSETS —
+        def load_all(subdir):
+            path = os.path.join(base_dir, "assets", subdir)
+            return [
+                pygame.image.load(os.path.join(path, f)).convert_alpha()
+                for f in os.listdir(path) if f.endswith(".png")
+            ]
+
+        self.tree_textures  = load_all("trees")
+        self.rock_textures  = load_all("rocks")
+        self.grass_textures = load_all("grass")
+
+        # how many of each? (make sure you added these to map.yaml)
+        tree_count  = map_cfg.get("tree_count", 50)
+        rock_count  = map_cfg.get("rock_count", 30)
+        grass_count = map_cfg.get("grass_count",100)
+
+        # scatter them into valid positions
+        self.tree_positions  = [self.world.random_pos() for _ in range(tree_count)]
+        self.rock_positions  = [self.world.random_pos() for _ in range(rock_count)]
+        self.grass_positions = [self.world.random_pos() for _ in range(grass_count)]
+
+        # hand off to World so collisions & LOS pick them up
+        self.world.trees = self.tree_positions
+        self.world.rocks = self.rock_positions
+
+
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
 
@@ -145,6 +172,23 @@ class GameEngine:
         for poly in self.world.ponds:
             pygame.draw.polygon(self.screen, (65,105,225), poly)
 
+        # 2a) Grass clumps on top of floor
+        for pos in self.grass_positions:
+            g = random.choice(self.grass_textures)
+            w, h = g.get_width(), g.get_height()
+            self.screen.blit(g, (int(pos[0] - w/2), int(pos[1] - h/2)))
+
+        # 2b) Scatter rocks
+        for pos in self.rock_positions:
+            r = random.choice(self.rock_textures)
+            w, h = r.get_width(), r.get_height()
+            self.screen.blit(r, (int(pos[0] - w/2), int(pos[1] - h/2)))
+
+        # 2c) Scatter trees
+        for pos in self.tree_positions:
+            t = random.choice(self.tree_textures)
+            w, h = t.get_width(), t.get_height()
+            self.screen.blit(t, (int(pos[0] - w/2), int(pos[1] - h/2)))
 
 
         # 2) Draw detailed buildings: shadows, two-tone walls, doors, textured floor in building interiors

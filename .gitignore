@@ -7,4 +7,7 @@ make_floor.py
 make_grass.py
 make_floor_wood_dark.py
 make_floor_wood_light.py
+.DS_Store
+.vscode/
 EOF
+
