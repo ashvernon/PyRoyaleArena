@@ -34,7 +34,11 @@ class GameEngine:
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])
-            self.agents.append(Agent(i, s, l, self.world, self.storm))
+            # Generate color: use HSL for spread
+            color = pygame.Color(0)
+            color.hsva = (int(360 * i / agents_cfg['count']), 90, 90, 100)
+            rgb = (color.r, color.g, color.b)
+            self.agents.append(Agent(i, s, l, self.world, self.storm, rgb))
 
         # — State holders —
         self.loot_items   = []
@@ -58,6 +62,10 @@ class GameEngine:
         # load floor tile 
         floor_asset_p = os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")
         self.floor_tex = pygame.image.load(floor_asset_p).convert()
+
+        base_dir = os.path.dirname(__file__)
+        agent_asset_p = os.path.join(base_dir, "assets", "agent_sprite.png")
+        self.agent_sprite = pygame.image.load(agent_asset_p).convert_alpha()
 
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
@@ -242,14 +250,15 @@ class GameEngine:
         # 6) Agents + health bars + ID
         for a in self.agents:
             x, y = a.pos
-            # Agent circle
 
-            pygame.draw.circle(
-                self.screen,
-                (0, 0, 255),
-                (int(x), int(y)),
-                5
-            )
+            # Tint the sprite
+            sprite = self.agent_sprite.copy()
+            tint = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            tint.fill((*a.color, 255))
+            sprite.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            self.screen.blit(sprite, (int(x - sprite.get_width() // 2), int(y - sprite.get_height() // 2)))
+
+
 
             # ID above agent (using smaller font)
             id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))

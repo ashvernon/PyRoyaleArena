@@ -13,7 +13,7 @@ from ..telemetry import log_event
 from ..constants import TICK_RATE
 
 class Agent:
-    def __init__(self, idx, skill, luck, world, storm):
+    def __init__(self, idx, skill, luck, world, storm, color):
         self.id             = idx
         self.health         = 100
         self.shield         = 0
@@ -25,6 +25,7 @@ class Agent:
         self.inventory      = Inventory()
         self.behavior       = Behavior(self, world, storm)
         self.cooldown_ticks = 0
+        self.color = color
 
     def tick(self, agents, loot_items):
         # 0) Decide next action
