@@ -3,30 +3,28 @@ import random
 import yaml
 import os
 import math
-from .constants            import TICK_RATE
-from .world                import World
-from .storm                import Storm
-from .items.loot_spawner   import LootSpawner
-from .agent.agent          import Agent
-from .telemetry            import flush, log_event
+from .constants          import TICK_RATE
+from .world              import World
+from .storm              import Storm
+from .items.loot_spawner import LootSpawner
+from .agent.agent        import Agent
+from .telemetry          import flush, log_event
 
 class GameEngine:
     def __init__(self):
         # — Load configs —
-        map_cfg        = yaml.safe_load(open('config/map.yaml'))
-        buildings_cfg  = yaml.safe_load(open('config/buildings.yaml'))
-        storm_cfg      = yaml.safe_load(open('config/storm.yaml'))
-        loot_cfg       = yaml.safe_load(open('config/loot_table.yaml'))
-        agents_cfg     = yaml.safe_load(open('config/agents.yaml'))
+        map_cfg       = yaml.safe_load(open('config/map.yaml'))
+        buildings_cfg = yaml.safe_load(open('config/buildings.yaml'))
+        storm_cfg     = yaml.safe_load(open('config/storm.yaml'))
+        loot_cfg      = yaml.safe_load(open('config/loot_table.yaml'))
+        agents_cfg    = yaml.safe_load(open('config/agents.yaml'))
 
-        # merge buildings into world config
         map_cfg['buildings'] = buildings_cfg.get('buildings', [])
 
         # — Init subsystems —
-        self.world    = World(map_cfg)
-        self.storm    = Storm(storm_cfg['phases'], self.world)
-        self.spawner  = LootSpawner(loot_cfg, self.world)
-        
+        self.world   = World(map_cfg)
+        self.storm   = Storm(storm_cfg['phases'], self.world)
+        self.spawner = LootSpawner(loot_cfg, self.world)
 
         # — Create agents —
         self.agents = []
@@ -34,71 +32,70 @@ class GameEngine:
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])
-            # Generate color: use HSL for spread
             color = pygame.Color(0)
             color.hsva = (int(360 * i / agents_cfg['count']), 90, 90, 100)
-            rgb = (color.r, color.g, color.b)
-            self.agents.append(Agent(i, s, l, self.world, self.storm, rgb))
+            self.agents.append(Agent(i, s, l, self.world, self.storm, (color.r, color.g, color.b)))
 
         # — State holders —
-        self.loot_items   = []
-        self.shots        = []   # [(start_pos, end_pos), ...]
-        self.total_agents = len(self.agents)
         self.loot_items   = self.spawner.spawn_initial_loot()
+        self.shots        = []
+        self.total_agents = len(self.agents)
 
         # — Pygame setup —
         pygame.init()
         pygame.font.init()
-        self.font   = pygame.font.SysFont(None, 24)
-        self.id_font = pygame.font.SysFont(None, 14)   # smaller size for IDs
+        self.font    = pygame.font.SysFont(None, 24)
+        self.id_font = pygame.font.SysFont(None, 14)
+
+        # screen shows the viewport
         self.screen = pygame.display.set_mode(
             (int(self.world.width), int(self.world.height))
         )
-        # load grass tile
-        base_dir = os.path.dirname(__file__)
-        asset_p = os.path.join(base_dir, "assets", "pygrass_tile.png")
-        self.grass_tex = pygame.image.load(asset_p).convert()
 
-        # load floor tile 
-        floor_asset_p = os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")
-        self.floor_tex = pygame.image.load(floor_asset_p).convert()
+        # world_surf holds the entire 2km×2km world (in world pixels)
+        self.world_surf = pygame.Surface(
+            (int(self.world.width), int(self.world.height))
+        )
 
-        base_dir = os.path.dirname(__file__)
-        agent_asset_p = os.path.join(base_dir, "assets", "agent_sprite.png")
-        self.agent_sprite = pygame.image.load(agent_asset_p).convert_alpha()
+        # camera for pan & zoom
+        self.cam_offset = [0, 0]
+        self.zoom       = 1.0
+        self.dragging   = False
+        self.last_mouse = (0, 0)
 
-        # a full‐screen, per‐pixel‐alpha surface
+        # load tiles & sprites
+        base_dir        = os.path.dirname(__file__)
+        self.grass_tex  = pygame.image.load(os.path.join(base_dir, "assets", "pygrass_tile.png")).convert()
+        self.floor_tex  = pygame.image.load(os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")).convert()
+        self.agent_sprite = pygame.image.load(os.path.join(base_dir, "assets", "agent_sprite.png")).convert_alpha()
+
+        # overlay for storm shading (reused each frame)
         self.overlay = pygame.Surface(
             (int(self.world.width), int(self.world.height)),
             pygame.SRCALPHA
-        ).convert_alpha()
+        )
 
-            # — LOAD SCATTERABLE ASSETS —
+        # scatterable assets (trees, rocks, grass)
         def load_all(subdir):
             path = os.path.join(base_dir, "assets", subdir)
-            return [
-                pygame.image.load(os.path.join(path, f)).convert_alpha()
-                for f in os.listdir(path) if f.endswith(".png")
-            ]
+            return [pygame.image.load(os.path.join(path, f)).convert_alpha()
+                    for f in os.listdir(path) if f.endswith(".png")]
 
         self.tree_textures  = load_all("trees")
         self.rock_textures  = load_all("rocks")
         self.grass_textures = load_all("grass")
 
-        # how many of each? (make sure you added these to map.yaml)
+        # counts from config
         tree_count  = map_cfg.get("tree_count", 50)
         rock_count  = map_cfg.get("rock_count", 30)
         grass_count = map_cfg.get("grass_count",100)
 
-        # scatter them into valid positions
         self.tree_positions  = [self.world.random_pos() for _ in range(tree_count)]
         self.rock_positions  = [self.world.random_pos() for _ in range(rock_count)]
         self.grass_positions = [self.world.random_pos() for _ in range(grass_count)]
 
-        # hand off to World so collisions & LOS pick them up
         self.world.trees = self.tree_positions
         self.world.rocks = self.rock_positions
-
 
         pygame.display.set_caption("Battle Royale Simulation")
         self.clock = pygame.time.Clock()
@@ -107,26 +104,62 @@ class GameEngine:
         running = True
         while running and len(self.agents) > 1:
             for e in pygame.event.get():
-                if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    mx, my = pygame.mouse.get_pos()
-                    found = False
-                    for agent in self.agents:
-                        # Adjust the radius if your agent circle is different
-                        if (agent.pos[0] - mx) ** 2 + (agent.pos[1] - my) ** 2 < 10 ** 2:
-                            self.selected_agent = agent
-                            found = True
-                            break
-                    if not found:
-                        self.selected_agent = None
+                # Quit
                 if e.type == pygame.QUIT:
                     running = False
 
+                # Mouse button pressed
+                elif e.type == pygame.MOUSEBUTTONDOWN:
+                    # Left click → select agent
+                    if e.button == 1:
+                        sx, sy = e.pos
+                        # Map screen coords → world coords
+                        wx = self.cam_offset[0] + sx / self.zoom
+                        wy = self.cam_offset[1] + sy / self.zoom
+
+                        # Click radius of 10px on screen ⇒ world radius
+                        r_world = 10 / self.zoom
+                        rr2 = r_world * r_world
+
+                        self.selected_agent = None
+                        for agent in self.agents:
+                            dx = agent.pos[0] - wx
+                            dy = agent.pos[1] - wy
+                            if dx*dx + dy*dy <= rr2:
+                                self.selected_agent = agent
+                                break
+
+                    # Middle click → start panning
+                    elif e.button == 2:
+                        self.dragging   = True
+                        self.last_mouse = e.pos
+
+                    # Wheel up → zoom in
+                    elif e.button == 4:
+                        self.zoom = min(self.zoom * 1.1, 5.0)
+                    # Wheel down → zoom out
+                    elif e.button == 5:
+                        self.zoom = max(self.zoom / 1.1, 0.2)
+
+                # Mouse button released
+                elif e.type == pygame.MOUSEBUTTONUP and e.button == 2:
+                    self.dragging = False
+
+                # Mouse moved while panning
+                elif e.type == pygame.MOUSEMOTION and self.dragging:
+                    dx, dy = e.pos[0] - self.last_mouse[0], e.pos[1] - self.last_mouse[1]
+                    self.cam_offset[0] -= dx / self.zoom
+                    self.cam_offset[1] -= dy / self.zoom
+                    self.last_mouse = e.pos
+
+            # Update & render loop
             self.update()
             self.render()
             self.clock.tick(TICK_RATE)
 
         flush()
         pygame.quit()
+
 
     def update(self):
         # 1) Storm
@@ -163,254 +196,147 @@ class GameEngine:
                 self.agents.remove(a)
 
     def render(self):
-        # 1) Textured grass background (tile the grass texture)
+        # 0) Draw entire world into world_surf
+        ws = self.world_surf
+        ws.fill((0, 0, 0))
 
-        tex = self.grass_tex
-        tw, th = tex.get_width(), tex.get_height()
-        # optional: make a bit transparent
-        tex.set_alpha(200)
-
+        # 1) Grass background
+        tw, th = self.grass_tex.get_width(), self.grass_tex.get_height()
         for x in range(0, int(self.world.width), tw):
             for y in range(0, int(self.world.height), th):
-                self.screen.blit(tex, (x, y))
+                ws.blit(self.grass_tex, (x, y))
 
-        # 2) Draw organic ponds
+        # 2) Ponds
         for poly in self.world.ponds:
-            pygame.draw.polygon(self.screen, (65,105,225), poly)
+            pygame.draw.polygon(ws, (65, 105, 225), poly)
 
-        # 2a) Grass clumps on top of floor
-        for pos in self.grass_positions:
+        # 3) Scatter grass, rocks, trees
+        for gx, gy in self.grass_positions:
             g = random.choice(self.grass_textures)
-            w, h = g.get_width(), g.get_height()
-            self.screen.blit(g, (int(pos[0] - w/2), int(pos[1] - h/2)))
-
-        # 2b) Scatter rocks
-        for pos in self.rock_positions:
+            ws.blit(g, (gx - g.get_width()//2, gy - g.get_height()//2))
+        for rx, ry in self.rock_positions:
             r = random.choice(self.rock_textures)
-            w, h = r.get_width(), r.get_height()
-            self.screen.blit(r, (int(pos[0] - w/2), int(pos[1] - h/2)))
-
-        # 2c) Scatter trees
-        for pos in self.tree_positions:
+            ws.blit(r, (rx - r.get_width()//2, ry - r.get_height()//2))
+        for tx, ty in self.tree_positions:
             t = random.choice(self.tree_textures)
-            w, h = t.get_width(), t.get_height()
-            self.screen.blit(t, (int(pos[0] - w/2), int(pos[1] - h/2)))
+            ws.blit(t, (tx - t.get_width()//2, ty - t.get_height()//2))
 
-
-        # 2) Draw detailed buildings: shadows, two-tone walls, doors, textured floor in building interiors
+        # 4) Buildings (floors + walls + doors + interiors)
         for b in self.world.buildings:
-            # Compute bounds of the exterior rectangle from outer wall segments only
-            xs = [w['x'] for w in b.get('walls',[])]
-            ws = [w['width'] for w in b.get('walls',[])]
-            ys = [w['y'] for w in b.get('walls',[])]
-            hs = [w['height'] for w in b.get('walls',[])]
-            minx = min(xs)
-            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
-            miny = min(ys)
-            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
-
+            # floor tiling
+            xs     = [seg['x']      for seg in b.get('walls', [])]
+            wsizes = [seg['width']  for seg in b.get('walls', [])]
+            ys     = [seg['y']      for seg in b.get('walls', [])]
+            hsizes = [seg['height'] for seg in b.get('walls', [])]
+            minx, maxx = min(xs), max(x0 + w0 for x0, w0 in zip(xs, wsizes))
+            miny, maxy = min(ys), max(y0 + h0 for y0, h0 in zip(ys, hsizes))
 
             fw, fh = self.floor_tex.get_width(), self.floor_tex.get_height()
             for fx in range(minx, maxx, fw):
                 for fy in range(miny, maxy, fh):
-                    # Calculate width and height to draw (crop if at the edge)
-                    draw_w = min(fw, maxx - fx)
-                    draw_h = min(fh, maxy - fy)
-                    if draw_w < fw or draw_h < fh:
-                        # Crop the texture for the edge
-                        sub = self.floor_tex.subsurface((0, 0, draw_w, draw_h))
-                        self.screen.blit(sub, (fx, fy))
+                    dw, dh = min(fw, maxx-fx), min(fh, maxy-fy)
+                    if dw<fw or dh<fh:
+                        sub = self.floor_tex.subsurface((0, 0, dw, dh))
+                        ws.blit(sub, (fx, fy))
                     else:
-                        self.screen.blit(self.floor_tex, (fx, fy))
+                        ws.blit(self.floor_tex, (fx, fy))
 
-
-
-
-            
             # outer walls
-            for w in b.get('walls', []):
-                x, y, wdt, hgt = w['x'], w['y'], w['width'], w['height']
-
-                # Draw drop shadow (soft, slightly offset, semi-transparent)
+            for seg in b.get('walls', []):
+                x, y, wdt, hgt = seg['x'], seg['y'], seg['width'], seg['height']
                 shadow = pygame.Surface((wdt+6, hgt+6), pygame.SRCALPHA)
                 pygame.draw.rect(shadow, (0,0,0,60), (0,0,wdt+6,hgt+6), border_radius=4)
-                self.screen.blit(shadow, (x-3, y-3))
-
-                # Outer dark edge
-                pygame.draw.rect(self.screen, (70, 70, 70), (x, y, wdt, hgt))
-                # Slightly inset, lighter inner face
+                ws.blit(shadow, (x-3, y-3))
+                pygame.draw.rect(ws, (70,70,70), (x, y, wdt, hgt))
                 pad = 2
-                pygame.draw.rect(self.screen, (180, 180, 180), (x+pad, y+pad, wdt-2*pad, hgt-2*pad))
+                pygame.draw.rect(ws, (180,180,180), (x+pad, y+pad, wdt-2*pad, hgt-2*pad))
 
-            # doors (brown vertical gradient)
+            # doors
             for d in b.get('doors', []):
                 x, y, wdt, hgt = d['x'], d['y'], d['width'], d['height']
                 for i in range(hgt):
-                    color = (
-                        120 + int(40 * i/hgt),  # redder at bottom
-                        80 + int(30 * i/hgt),   # greener at bottom
-                        40                      # low blue, brown
+                    col = (
+                        120 + int(40*i/hgt),
+                        80  + int(30*i/hgt),
+                        40
                     )
-                    pygame.draw.line(self.screen, color, (x, y+i), (x+wdt, y+i))
+                    pygame.draw.line(ws, col, (x, y+i), (x+wdt, y+i))
 
-            # interior walls (simple medium gray)
-            for i in b.get('interiors', []):
-                pygame.draw.rect(self.screen, (160, 160, 160),
-                                 (i['x'], i['y'], i['width'], i['height']))
-
-
-
-
-        # 3) Players remaining counter
-        remaining = len(self.agents)
-        counter_surf = self.font.render(
-            f"{remaining} / {self.total_agents}",
-            True,
-            (255, 255, 255)
-        )
-        self.screen.blit(counter_surf, (10, 10))
-
-        # 4) Storm-cycle timer
-        phase        = self.storm.phases[self.storm.current_phase]
-        ticks        = self.storm.ticks_in_phase
-        hold_ticks   = phase['hold']   * TICK_RATE
-        shrink_ticks = phase['shrink'] * TICK_RATE
-
-        if ticks <= hold_ticks:
-            # still holding radius
-            secs_left = (hold_ticks - ticks) // TICK_RATE
-            label     = f"Holding: {secs_left}s"
-        else:
-            # currently shrinking
-            elapsed_shrink = ticks - hold_ticks
-            if elapsed_shrink <= shrink_ticks:
-                secs_left = (shrink_ticks - elapsed_shrink) // TICK_RATE
-            else:
-                secs_left = 0
-            label = f"Shrinking: {secs_left}s"
-
-        timer_surf = self.font.render(label, True, (255, 255, 255))
-        self.screen.blit(timer_surf, (10, 30))
-
+            # interiors
+            for interior in b.get('interiors', []):
+                pygame.draw.rect(ws, (160,160,160),
+                                 (interior['x'], interior['y'],
+                                  interior['width'], interior['height']))
 
         # 5) Loot items
         for item in self.loot_items:
-            col = (255, 215, 0) if item['type'] == 'weapon' else (0, 255, 255)
+            col = (255,215,0) if item['type']=='weapon' else (0,255,255)
             x, y = item['pos']
-            pygame.draw.rect(self.screen, col, (int(x-3), int(y-3), 6, 6))
+            pygame.draw.rect(ws, col, (int(x-3), int(y-3), 6, 6))
 
-        # 6) Agents + health bars + ID
+        # 6) Agents + health bars
         for a in self.agents:
             x, y = a.pos
-
-            # Tint the sprite
+            # tinted sprite
             sprite = self.agent_sprite.copy()
-            tint = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
+            tint   = pygame.Surface(sprite.get_size(), pygame.SRCALPHA)
             tint.fill((*a.color, 255))
-            sprite.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            self.screen.blit(sprite, (int(x - sprite.get_width() // 2), int(y - sprite.get_height() // 2)))
+            sprite.blit(tint, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
+            ws.blit(sprite, (int(x - sprite.get_width()/2),
+                             int(y - sprite.get_height()/2)))
 
+            # health bar
+            hb = int((a.health/100)*10)
+            pygame.draw.rect(ws, (255,0,0), (int(x-5), int(y-20), 10, 2))
+            pygame.draw.rect(ws, (0,255,0), (int(x-5), int(y-20), hb, 2))
 
-
-            # ID above agent (using smaller font)
-            # id_surf = self.id_font.render(str(a.id), True, (255, 255, 0))
-            # self.screen.blit(id_surf, (int(x - 5), int(y - 20)))
-
-            # Health bar (red bg + green fg)
-            hb_width = int((a.health / 100) * 10)
-            pygame.draw.rect(
-                self.screen,
-                (255, 0, 0),
-                (int(x - 5), int(y - 20), 10, 2)
-            )
-            pygame.draw.rect(
-                self.screen,
-                (0, 255, 0),
-                (int(x - 5), int(y - 20), hb_width, 2)
-            )
-
-            # 7) Storm circle
-
-            # Compute safe‐zone center & radius up front
-            cx, cy = self.world.center
-            radius = int(self.storm.radius)
-
-            # # — Grey out outside the safe zone —
-            # overlay = pygame.Surface(
-            #     (int(self.world.width), int(self.world.height)),
-            #     pygame.SRCALPHA
-            # )
-            # overlay.fill((128, 128, 128, 150))
-            # pygame.draw.circle(
-            #     overlay,
-            #     (0, 0, 0, 0),       # cut a transparent hole
-            #     (cx, cy),
-            #     radius
-            # )
-            # self.screen.blit(overlay, (0, 0))
-
-            # (Re)draw storm border on top
-            pygame.draw.circle(
-                self.screen,
-                (255, 255, 255),
-                (cx, cy),
-                radius,
-                2
-            )
-
-
-        # 8) Shot visuals
+        # 7) Shot visuals
         for start, end in self.shots:
-            pygame.draw.line(
-                self.screen,
-                (255, 0, 0),
-                (int(start[0]), int(start[1])),
-                (int(end[0]), int(end[1])),
-                1
-            )
+            pygame.draw.line(ws, (255,0,0),
+                             (int(start[0]), int(start[1])),
+                             (int(end[0]),   int(end[1])),
+                             1)
 
-        # — GREY OUTSIDE THE SAFE ZONE —  
-        cx, cy = int(self.world.center[0]), int(self.world.center[1])
-        radius = int(self.storm.radius)
+        # — VIEWPORT CROPPING & ZOOM BLIT —
+        sw, sh = self.screen.get_size()
+        view_w = min(sw/self.zoom,  self.world.width)
+        view_h = min(sh/self.zoom,  self.world.height)
+        max_x  = self.world.width  - view_w
+        max_y  = self.world.height - view_h
+        vx     = max(0, min(self.cam_offset[0], max_x))
+        vy     = max(0, min(self.cam_offset[1], max_y))
+        vp     = pygame.Rect(int(vx), int(vy), int(view_w), int(view_h))
+        sub    = ws.subsurface(vp)
+        scaled = pygame.transform.smoothscale(sub, (sw, sh))
+        self.screen.blit(scaled, (0, 0))
 
-        # reuse overlay Surface created in __init__
-        self.overlay.fill((50, 50, 50, 150))    # semi-transparent grey
-        pygame.draw.circle(
-            self.overlay,
-            (0, 0, 0, 0),                      # 0 alpha = punch-through
-            (cx, cy),
-            radius
-        )
-        self.screen.blit(self.overlay, (0, 0))
+        # 8) Players remaining counter
+        remaining = len(self.agents)
+        cnt_surf = self.font.render(f"{remaining} / {self.total_agents}", True, (255,255,255))
+        self.screen.blit(cnt_surf, (10,10))
 
-        # redraw storm border on top
-        pygame.draw.circle(
-            self.screen,
-            (255, 255, 255),
-            (cx, cy),
-            radius,
-            2
-        )
+        # 9) Storm-cycle timer
+        phase      = self.storm.phases[self.storm.current_phase]
+        ticks      = self.storm.ticks_in_phase
+        hold_t, shr = phase['hold']*TICK_RATE, phase['shrink']*TICK_RATE
+        if ticks<=hold_t:
+            lbl = f"Holding: {(hold_t-ticks)//TICK_RATE}s"
+        else:
+            secs = max(0, (shr-(ticks-hold_t))//TICK_RATE)
+            lbl  = f"Shrinking: {secs}s"
+        timer_surf = self.font.render(lbl, True, (255,255,255))
+        self.screen.blit(timer_surf, (10,30))
 
+        # 10) Storm overlay
+        cxw, cyw = self.world.center
+        sx = int((cxw - vx)*self.zoom)
+        sy = int((cyw - vy)*self.zoom)
+        sr = int(self.storm.radius * self.zoom)
+        self.overlay.fill((50,50,50,150))
+        pygame.draw.circle(self.overlay, (0,0,0,0), (sx,sy), sr)
+        self.screen.blit(self.overlay, (0,0))
+        pygame.draw.circle(self.screen, (255,255,255), (sx,sy), sr, 2)
 
-
-
-        # 9) UI Legend
-        legend_items = [
-            ("Weapon",     (255, 215,   0), "rect"),
-            ("Consumable", (  0, 255, 255), "rect"),
-            ("Building",   (100, 100, 100), "rect"),
-            ("Agent",      (  0,   0, 255), "circle"),
-        ]
-        lx, ly = 10, 50
-        for label, color, shape in legend_items:
-            if shape == "rect":
-                pygame.draw.rect(self.screen, color, (lx, ly, 12, 12))
-            else:
-                pygame.draw.circle(self.screen, color, (lx + 6, ly + 6), 6)
-            text_surf = self.font.render(label, True, (255, 255, 255))
-            self.screen.blit(text_surf, (lx + 18, ly))
-            ly += 18
 
         # Agent inspector
         if self.selected_agent:
@@ -432,8 +358,16 @@ class GameEngine:
             for i, text in enumerate(lines):
                 surf = font.render(text, True, (255, 255, 255))
                 self.screen.blit(surf, (28, 128 + i * 18))
-            # Highlight selected agent with a circle
-            pygame.draw.circle(self.screen, (255, 255, 0), (int(agent.pos[0]), int(agent.pos[1])), 9, 2)
+                screen_x = int((agent.pos[0] - vx) * self.zoom)
+                screen_y = int((agent.pos[1] - vy) * self.zoom)
+                # Draw highlight at the scaled position & size
+                pygame.draw.circle(
+                    self.screen,
+                    (255, 255, 0),
+                    (screen_x, screen_y),
+                    max(2, int(9 * self.zoom)),  # scale radius too (or keep fixed)
+                    2
+                )
 
 
         # 10) Flip display
