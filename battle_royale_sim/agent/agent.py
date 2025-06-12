@@ -28,6 +28,7 @@ class Agent:
         self.color = color
         self.current_action = None
         self.last_decision  = None
+        self.kills          = 0
 
     def tick(self, agents, loot_items):
         # 0) Decide next action
@@ -71,16 +72,37 @@ class Agent:
             return None
 
         target = min(enemies, key=lambda a: distance(self.pos, a.pos))
-        # block shots that pass through walls
+
+        # block shots through walls
         if not self.world.has_line_of_sight(self.pos, target.pos):
             return None
-        dist   = distance(self.pos, target.pos)
-        if dist > weapon.range:
+
+        # out of range?
+        if distance(self.pos, target.pos) > weapon.range:
             return None
 
         hit_chance = weapon.accuracy * self.skill
         if random.random() <= hit_chance:
-            target.health -= weapon.damage
+            dmg = weapon.damage
+
+            # shields absorb first
+            if target.shield > 0:
+                blocked = min(target.shield, dmg)
+                target.shield -= blocked
+                dmg -= blocked
+
+            # leftover goes to health
+            if dmg > 0:
+                target.health -= dmg
+
+                # —— NEW: count a kill if they dropped to 0 or below —— 
+                if target.health <= 0:
+                    self.kills += 1
+                    log_event('kill', {
+                        'killer': self.id,
+                        'victim': target.id
+                    })
+
             log_event('hit', {
                 'shooter': self.id,
                 'target':  target.id,
@@ -92,8 +114,11 @@ class Agent:
                 'target':  target.id
             })
 
+        # reset cooldown
         self.cooldown_ticks = max(1, int(TICK_RATE / weapon.fire_rate))
         return (self.pos, target.pos)
+
+
 
     def _move_towards(self, target):
         dx, dy = target[0] - self.pos[0], target[1] - self.pos[1]
@@ -102,7 +127,7 @@ class Agent:
             base_step = 2
             # slow down in water
             if self.world.is_in_water(self.pos):
-                step = base_step * 0.5
+                step = base_step * 0.75
             else:
                 step = base_step
             new_pos = (
