@@ -341,8 +341,8 @@ class GameEngine:
         # Agent inspector
         if self.selected_agent:
             agent = self.selected_agent
-            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 200))
-            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 200), 2)
+            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 220))
+            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 220), 2)
             font = self.font
             lines = [
                 f"Agent #{agent.id}",
