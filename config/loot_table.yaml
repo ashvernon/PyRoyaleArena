@@ -17,32 +17,14 @@ weapons:
     magazine_size: 5
     reload_time: 2.0
 
-    shotgun:
-    spawn_chance: 0.08    # slightly rarer than the rifle
-    damage: 60           # high damage up close
-    fire_rate: 0.25      # pumps slowly
-    accuracy: 0.5        # wide spread
-    range: 100           # short effective distance
-    magazine_size: 2     # double-barrel style
-    reload_time: 2.5
-
-  sniper_rifle:
-    spawn_chance: 0.05    # scarce, high-value pick
-    damage: 80           # one-shot potential
-    fire_rate: 0.20      # very slow to chamber
-    accuracy: 0.95       # nearly pinpoint
-    range: 400           # extreme long-range
-    magazine_size: 3     # small bolt-action mag
-    reload_time: 3.0
-
 consumables:
   medkit:
     spawn_chance: 0.05
     heal_amount: 50
 
   shield:
-    spawn_chance: 0.1
-    shield_amount: 25
+    spawn_chance: 0.05
+    shield_amount: 50
 
 materials:
   wood:
