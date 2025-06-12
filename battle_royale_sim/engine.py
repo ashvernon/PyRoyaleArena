@@ -283,7 +283,8 @@ class GameEngine:
             tint.fill((*a.color, 255))
             sprite.blit(tint, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
             ws.blit(sprite, (int(x - sprite.get_width()/2),
-                             int(y - sprite.get_height()/2)))
+                             int(y - sprite.get_height()/2)))          
+
 
             # health bar
             hb = int((a.health/100)*10)
@@ -295,7 +296,8 @@ class GameEngine:
             pygame.draw.line(ws, (255,0,0),
                              (int(start[0]), int(start[1])),
                              (int(end[0]),   int(end[1])),
-                             1)
+                             1)       
+
 
         # — VIEWPORT CROPPING & ZOOM BLIT —
         sw, sh = self.screen.get_size()
@@ -309,6 +311,13 @@ class GameEngine:
         sub    = ws.subsurface(vp)
         scaled = pygame.transform.smoothscale(sub, (sw, sh))
         self.screen.blit(scaled, (0, 0))
+
+        fps = int(self.clock.get_fps())
+        self.screen.blit(self.font.render(f"FPS: {fps}", True, (255,255,0)), (sw-60, 10))
+
+        # Zoom Level
+        self.screen.blit(self.font.render(f"Zoom: {self.zoom:.2f}×", True, (255,255,255)), (sw-100, 30))
+
 
         # 8) Players remaining counter
         remaining = len(self.agents)
@@ -338,38 +347,60 @@ class GameEngine:
         pygame.draw.circle(self.screen, (255,255,255), (sx,sy), sr, 2)
 
 
-        # Agent inspector
+        # — Agent inspector —
         if self.selected_agent:
             agent = self.selected_agent
-            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 220))
-            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 220), 2)
+            # background panel
+            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 260))
+            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 260), 2)
+
             font = self.font
             lines = [
-                f"Agent #{agent.id}",
-                f"Health: {int(agent.health)}",
-                f"Shield: {int(agent.shield)}",
-                f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",
-                f"Skill: {agent.skill:.2f}  Luck: {agent.luck:.2f}",
-                f"Kills: {agent.kills}",
-                f"Last Strategy: {agent.last_decision}",
+                f"Agent #{agent.id}",                                            # identifier
+                f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",         # where they are
+                f"Health: {int(agent.health)}   Shield: {int(agent.shield)}",    # survivability
+                f"Skill: {agent.skill:.2f}   Luck: {agent.luck:.2f}",             # their stats
+                f"Kills: {agent.kills}",                                         # fight performance
+                f"Accuracy: {agent.shots_hit}/{agent.shots_fired} "              # shot stats
+                f"({(agent.shots_hit/agent.shots_fired*100) if agent.shots_fired else 0.0:.1f}%)",
+                f"Last Strategy: {agent.last_decision}",                          # AI decisions
                 f"Current Strategy: {agent.current_action}",
-                f"Inventory:",
-                f"  Weapons: " + ", ".join(getattr(w, 'name', str(w)) for w in agent.inventory.weapons) if agent.inventory.weapons else "  Weapons: (none)",
-                f"  Consumables: {len(agent.inventory.consumables)}"
+                "Inventory:"                                                     # inventory header
             ]
+
+            # Weapons
+            if agent.inventory.weapons:
+                weapon_names = ", ".join(w.name for w in agent.inventory.weapons)
+            else:
+                weapon_names = "(none)"
+            lines.append(f"  Weapons: {weapon_names}")
+
+            # Consumables (show each name(+amount))
+            if agent.inventory.consumables:
+                consumable_list = ", ".join(
+                    f"{c['name']}(+{c['amount']})"
+                    for c in agent.inventory.consumables
+                )
+            else:
+                consumable_list = "(none)"
+            lines.append(f"  Consumables: {consumable_list}")
+
+            # render each line
             for i, text in enumerate(lines):
                 surf = font.render(text, True, (255, 255, 255))
-                self.screen.blit(surf, (28, 128 + i * 18))
-                screen_x = int((agent.pos[0] - vx) * self.zoom)
-                screen_y = int((agent.pos[1] - vy) * self.zoom)
-                # Draw highlight at the scaled position & size
-                pygame.draw.circle(
-                    self.screen,
-                    (255, 255, 0),
-                    (screen_x, screen_y),
-                    max(2, int(9 * self.zoom)),  # scale radius too (or keep fixed)
-                    2
-                )
+                self.screen.blit(surf, (28, 128 + i*18))
+
+            # highlight the selected agent on map
+            screen_x = int((agent.pos[0] - vx) * self.zoom)
+            screen_y = int((agent.pos[1] - vy) * self.zoom)
+            pygame.draw.circle(
+                self.screen,
+                (255, 255, 0),
+                (screen_x, screen_y),
+                max(2, int(9 * self.zoom)),
+                2
+            )
+
 
 
         # 10) Flip display
