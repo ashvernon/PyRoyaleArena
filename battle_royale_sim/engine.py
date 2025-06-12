@@ -350,6 +350,7 @@ class GameEngine:
                 f"Shield: {int(agent.shield)}",
                 f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",
                 f"Skill: {agent.skill:.2f}  Luck: {agent.luck:.2f}",
+                f"Kills: {agent.kills}",
                 f"Last Strategy: {agent.last_decision}",
                 f"Current Strategy: {agent.current_action}",
                 f"Inventory:",
