@@ -2,6 +2,6 @@ width: 1000
 height: 1000
 
 # how many of each scatterable to spawn
-tree_count: 50
-rock_count: 30
-grass_count: 100
+tree_count: 100
+rock_count: 60
+grass_count: 200

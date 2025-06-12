@@ -16,7 +16,7 @@ class Agent:
     def __init__(self, idx, skill, luck, world, storm, color):
         self.id             = idx
         self.health         = 100
-        self.shield         = 0
+        self.shield         = 50
         self.skill          = skill
         self.luck           = luck
         self.pos            = world.random_pos()
@@ -26,16 +26,22 @@ class Agent:
         self.behavior       = Behavior(self, world, storm)
         self.cooldown_ticks = 0
         self.color = color
+        self.current_action = None
+        self.last_decision  = None
 
     def tick(self, agents, loot_items):
         # 0) Decide next action
-        action, target = self.behavior.select_action(agents, loot_items)
+        decision, target = self.behavior.select_action(agents, loot_items)
+        self.last_decision = decision
 
-        # 1) Execute: either attack or move
-        if action == 'attack':
-            _ = self.attack(agents)
+        # 1) Execute: either attack or move, and record what actually happened
+        if decision == 'attack':
+            shot = self.attack(agents)
+            # if shot is None, we couldn’t fire (cooldown, no weapon, blocked…), so idle
+            self.current_action = 'attack' if shot else 'idle'
         else:
             self._move_towards(target)
+            self.current_action = 'move'
 
         # 2) Loot pickup
         for item in loot_items[:]:
@@ -49,6 +55,7 @@ class Agent:
             dmg = self.storm.damage()
             self.health -= dmg
             log_event('storm_damage', {'agent': self.id, 'damage': dmg})
+
 
     def attack(self, agents):
         if self.cooldown_ticks > 0:

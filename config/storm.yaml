@@ -1,12 +1,15 @@
 # config/storm.yaml
 
 phases:
-  - hold:   50    # seconds to stay stationary
-    shrink: 15     # seconds to transition to next radius
+  - hold:   60    # seconds to stay stationary
+    shrink: 45     # seconds to transition to next radius
     damage: 1
-  - hold:   40
+  - hold:   45
     shrink: 15
     damage: 1
   - hold:   30
     shrink: 15
+    damage: 2
+  - hold:   15
+    shrink: 150
     damage: 2

@@ -341,8 +341,8 @@ class GameEngine:
         # Agent inspector
         if self.selected_agent:
             agent = self.selected_agent
-            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 150))
-            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 150), 2)
+            pygame.draw.rect(self.screen, (30, 30, 30), (20, 120, 270, 200))
+            pygame.draw.rect(self.screen, (200, 200, 50), (20, 120, 270, 200), 2)
             font = self.font
             lines = [
                 f"Agent #{agent.id}",
@@ -350,7 +350,8 @@ class GameEngine:
                 f"Shield: {int(agent.shield)}",
                 f"Position: ({int(agent.pos[0])}, {int(agent.pos[1])})",
                 f"Skill: {agent.skill:.2f}  Luck: {agent.luck:.2f}",
-                f"Last action: {getattr(agent.behavior, 'last_action', '?')}",
+                f"Last Strategy: {agent.last_decision}",
+                f"Current Strategy: {agent.current_action}",
                 f"Inventory:",
                 f"  Weapons: " + ", ".join(getattr(w, 'name', str(w)) for w in agent.inventory.weapons) if agent.inventory.weapons else "  Weapons: (none)",
                 f"  Consumables: {len(agent.inventory.consumables)}"
