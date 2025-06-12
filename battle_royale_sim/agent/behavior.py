@@ -125,7 +125,7 @@ class Behavior:
             'boundary': boundary_score,
             'hide': hide_score,
             'ambush': ambush_score,
-            'roam': 0.55
+            'roam': 0.1
         }
 
         action, _ = max(scores.items(), key=lambda kv: kv[1])

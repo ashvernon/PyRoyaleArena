@@ -16,7 +16,7 @@ class Agent:
     def __init__(self, idx, skill, luck, world, storm, color):
         self.id             = idx
         self.health         = 100
-        self.shield         = 50
+        self.shield         = 0
         self.skill          = skill
         self.luck           = luck
         self.pos            = world.random_pos()
@@ -34,10 +34,9 @@ class Agent:
         decision, target = self.behavior.select_action(agents, loot_items)
         self.last_decision = decision
 
-        # 1) Execute: either attack or move, and record what actually happened
+        # 1) Execute: either attack or move, record what actually happened
         if decision == 'attack':
             shot = self.attack(agents)
-            # if shot is None, we couldn’t fire (cooldown, no weapon, blocked…), so idle
             self.current_action = 'attack' if shot else 'idle'
         else:
             self._move_towards(target)
@@ -50,11 +49,49 @@ class Agent:
                 loot_items.remove(item)
                 log_event('pickup', {'agent': self.id, 'item': item['type']})
 
-        # 3) Storm damage
+        # 2.5) Auto‐use consumables if needed
+        MAX_HEALTH = 100
+        MAX_SHIELD = 50
+
+        # — Medkit restores health —
+        for cons in self.inventory.consumables[:]:
+            if cons['name'] == 'medkit' and self.health < MAX_HEALTH:
+                amt = cons['amount']
+                self.health = min(MAX_HEALTH, self.health + amt)
+                self.inventory.consumables.remove(cons)
+                log_event('use_consumable', {
+                    'agent':    self.id,
+                    'item':     'medkit',
+                    'restored': amt
+                })
+                break
+
+        # — Shield‐kit restores shield —
+        for cons in self.inventory.consumables[:]:
+            if cons['name'] == 'shield' and self.shield < MAX_SHIELD:
+                amt = cons['amount']
+                self.shield = min(MAX_SHIELD, self.shield + amt)
+                self.inventory.consumables.remove(cons)
+                log_event('use_consumable', {
+                    'agent':    self.id,
+                    'item':     'shield',
+                    'restored': amt
+                })
+                break
+
+        # 3) Storm damage (eat shield first, then health)
         if not self.storm.in_safe_zone(self.pos):
             dmg = self.storm.damage()
-            self.health -= dmg
+            # shields absorb first
+            if self.shield > 0:
+                blocked = min(self.shield, dmg)
+                self.shield -= blocked
+                dmg -= blocked
+            # any remainder hits health
+            if dmg > 0:
+                self.health -= dmg
             log_event('storm_damage', {'agent': self.id, 'damage': dmg})
+
 
 
     def attack(self, agents):
@@ -71,16 +108,23 @@ class Agent:
             return None
 
         target = min(enemies, key=lambda a: distance(self.pos, a.pos))
-        # block shots that pass through walls
         if not self.world.has_line_of_sight(self.pos, target.pos):
             return None
-        dist   = distance(self.pos, target.pos)
-        if dist > weapon.range:
+        if distance(self.pos, target.pos) > weapon.range:
             return None
 
         hit_chance = weapon.accuracy * self.skill
         if random.random() <= hit_chance:
-            target.health -= weapon.damage
+            dmg = weapon.damage
+            # shields absorb first
+            if target.shield > 0:
+                blocked = min(target.shield, dmg)
+                target.shield -= blocked
+                dmg -= blocked
+            # leftover goes to health
+            if dmg > 0:
+                target.health -= dmg
+
             log_event('hit', {
                 'shooter': self.id,
                 'target':  target.id,
@@ -94,6 +138,7 @@ class Agent:
 
         self.cooldown_ticks = max(1, int(TICK_RATE / weapon.fire_rate))
         return (self.pos, target.pos)
+
 
     def _move_towards(self, target):
         dx, dy = target[0] - self.pos[0], target[1] - self.pos[1]
