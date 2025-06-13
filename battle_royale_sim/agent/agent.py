@@ -5,13 +5,6 @@ from ..inventory import Inventory
 from ..telemetry import log_event
 from ..constants import TICK_RATE
 
-import random
-from ..utils import distance
-from .behavior import Behavior
-from ..inventory import Inventory
-from ..telemetry import log_event
-from ..constants import TICK_RATE
-
 class Agent:
     def __init__(self, idx, skill, luck, world, storm, color):
         self.id             = idx
