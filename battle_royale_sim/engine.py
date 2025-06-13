@@ -175,21 +175,16 @@ class GameEngine:
             self.loot_items.extend(inside)
 
         # 3) Agent actions: decide, move/attack, pickup, storm damage & elimination
+        self.shots = []
         for a in self.agents[:]:
-            # tick now accepts both agents list and loot_items
-            a.tick(self.agents, self.loot_items)
+            shot = a.tick(self.agents, self.loot_items)
+            if shot:
+                self.shots.append(shot)
             if a.health <= 0:
                 log_event('eliminate', {'agent': a.id})
                 self.agents.remove(a)
 
-        # 4) Combat: collect shot visuals
-        self.shots = []
-        for a in self.agents:
-            shot = a.attack(self.agents)
-            if shot:
-                self.shots.append(shot)
-
-        # 5) Post-combat elimination (in case attack killed someone)
+        # 4) Post-combat elimination (in case attack killed someone)
         for a in self.agents[:]:
             if a.health <= 0:
                 log_event('eliminate', {'agent': a.id})

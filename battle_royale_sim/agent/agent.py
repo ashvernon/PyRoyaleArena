@@ -31,9 +31,15 @@ class Agent:
         self.kills          = 0
 
     def tick(self, agents, loot_items):
+        """Update agent state for a single tick.
+
+        Returns the visual representation of a shot if one was fired.
+        """
         # 0) Decide next action
         decision, target = self.behavior.select_action(agents, loot_items)
         self.last_decision = decision
+
+        shot = None
 
         # 1) Execute: either attack or move, and record what actually happened
         if decision == 'attack':
@@ -56,6 +62,8 @@ class Agent:
             dmg = self.storm.damage()
             self.health -= dmg
             log_event('storm_damage', {'agent': self.id, 'damage': dmg})
+
+        return shot
 
 
     def attack(self, agents):
