@@ -56,7 +56,7 @@ buildings:
       - {x: 855, y: 100, width: 5, height: 120}
     doors:
       - {x: 825, y: 100, width: 10, height: 5}
-      - {x: 850, y: 215, width: 10, height: 5}
+      - {x: 830, y: 215, width: 10, height: 5}
     interiors:
       - {x: 825, y: 150, width: 20, height: 5}
 
@@ -92,7 +92,7 @@ buildings:
       - {x: 515, y: 635, width: 40, height: 5}
     doors:
       - {x: 515, y: 600, width: 10, height: 5}
-      - {x: 550, y: 675, width: 10, height: 5}
+      - {x: 530, y: 675, width: 10, height: 5}
     interiors:
       - {x: 515, y: 645, width: 20, height: 5}
 
