@@ -61,9 +61,17 @@ class GameEngine:
         self.font    = pygame.font.SysFont(None, 24)
         self.id_font = pygame.font.SysFont(None, 14)
 
+        self.world_w = int(self.world.width)
+        self.world_h = int(self.world.height)
+        self.sidebar_w = 360
+        self.sidebar_pad = 10
+        self.sidebar_row_h = 40
+        self.sidebar_top_n = 25
+        self.sidebar_header_h = 36
+
         # screen shows the viewport
         self.screen = pygame.display.set_mode(
-            (int(self.world.width), int(self.world.height))
+            (self.world_w + self.sidebar_w, self.world_h)
         )
 
         # world_surf holds the entire 2km×2km world (in world pixels)
@@ -127,6 +135,10 @@ class GameEngine:
                     # Left click → select agent
                     if e.button == 1:
                         sx, sy = e.pos
+                        if self._handle_sidebar_click(sx, sy):
+                            continue
+                        if sx >= self.world_w:
+                            continue
                         # Map screen coords → world coords
                         wx = self.cam_offset[0] + sx / self.zoom
                         wy = self.cam_offset[1] + sy / self.zoom
@@ -145,15 +157,18 @@ class GameEngine:
 
                     # Middle click → start panning
                     elif e.button == 2:
-                        self.dragging   = True
-                        self.last_mouse = e.pos
+                        if e.pos[0] < self.world_w:
+                            self.dragging   = True
+                            self.last_mouse = e.pos
 
                     # Wheel up → zoom in
                     elif e.button == 4:
-                        self.zoom = min(self.zoom * 1.1, 5.0)
+                        if e.pos[0] < self.world_w:
+                            self.zoom = min(self.zoom * 1.1, 5.0)
                     # Wheel down → zoom out
                     elif e.button == 5:
-                        self.zoom = max(self.zoom / 1.1, 0.2)
+                        if e.pos[0] < self.world_w:
+                            self.zoom = max(self.zoom / 1.1, 0.2)
 
                 # Mouse button released
                 elif e.type == pygame.MOUSEBUTTONUP and e.button == 2:
@@ -308,15 +323,15 @@ class GameEngine:
 
         # — VIEWPORT CROPPING & ZOOM BLIT —
         sw, sh = self.screen.get_size()
-        view_w = min(sw/self.zoom,  self.world.width)
-        view_h = min(sh/self.zoom,  self.world.height)
+        view_w = min(self.world_w/self.zoom,  self.world.width)
+        view_h = min(self.world_h/self.zoom,  self.world.height)
         max_x  = self.world.width  - view_w
         max_y  = self.world.height - view_h
         vx     = max(0, min(self.cam_offset[0], max_x))
         vy     = max(0, min(self.cam_offset[1], max_y))
         vp     = pygame.Rect(int(vx), int(vy), int(view_w), int(view_h))
         sub    = ws.subsurface(vp)
-        scaled = pygame.transform.smoothscale(sub, (sw, sh))
+        scaled = pygame.transform.smoothscale(sub, (self.world_w, self.world_h))
         self.screen.blit(scaled, (0, 0))
 
         # 8) Players remaining counter
@@ -380,6 +395,101 @@ class GameEngine:
                     2
                 )
 
+        self._render_sidebar()
+
 
         # 10) Flip display
         pygame.display.flip()
+
+    def _leaderboard_agents(self):
+        ranked = sorted(
+            self.agents,
+            key=lambda a: (-a.kills, -(a.health + a.shield), a.id)
+        )
+        return ranked[:self.sidebar_top_n]
+
+    def _handle_sidebar_click(self, sx, sy):
+        if sx < self.world_w:
+            return False
+
+        rel_x = sx - self.world_w
+        if rel_x < 0 or rel_x > self.sidebar_w:
+            return False
+
+        header_bottom = self.sidebar_pad + self.sidebar_header_h
+        row_area_start = header_bottom
+        if sy < row_area_start:
+            return True
+
+        idx = (sy - row_area_start) // self.sidebar_row_h
+        agents = self._leaderboard_agents()
+        if 0 <= idx < len(agents):
+            self.selected_agent = agents[int(idx)]
+        return True
+
+    def _render_sidebar(self):
+        sidebar_x = self.world_w
+        bg_rect = pygame.Rect(sidebar_x, 0, self.sidebar_w, self.world_h)
+        pygame.draw.rect(self.screen, (24, 24, 24), bg_rect)
+
+        header = self.font.render("Leaderboard (Top 25)", True, (240, 240, 240))
+        self.screen.blit(header, (sidebar_x + self.sidebar_pad, self.sidebar_pad))
+        count_lbl = self.id_font.render(
+            f"Alive: {len(self.agents)} / {self.total_agents}", True, (200, 200, 200)
+        )
+        self.screen.blit(count_lbl, (sidebar_x + self.sidebar_pad, self.sidebar_pad + 18))
+
+        header_bottom = self.sidebar_pad + self.sidebar_header_h
+        row_width = self.sidebar_w - 2 * self.sidebar_pad
+        agents = self._leaderboard_agents()
+
+        for idx, agent in enumerate(agents):
+            row_y = header_bottom + idx * self.sidebar_row_h
+            row_rect = pygame.Rect(sidebar_x + self.sidebar_pad, row_y, row_width, self.sidebar_row_h - 6)
+            is_selected = self.selected_agent and agent.id == self.selected_agent.id
+            base_color = (40, 40, 40) if idx % 2 == 0 else (34, 34, 34)
+            pygame.draw.rect(self.screen, base_color, row_rect)
+            if is_selected:
+                pygame.draw.rect(self.screen, (200, 180, 60), row_rect, 2)
+
+            rank_surf = self.font.render(f"{idx+1}", True, (210, 210, 210))
+            self.screen.blit(rank_surf, (row_rect.x + 6, row_rect.y + 6))
+
+            icon = pygame.transform.smoothscale(self.agent_sprite, (20, 20))
+            tint = pygame.Surface(icon.get_size(), pygame.SRCALPHA)
+            tint.fill((*agent.color, 255))
+            icon.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            self.screen.blit(icon, (row_rect.x + 32, row_rect.y + 4))
+
+            name_surf = self.font.render(f"Agent #{agent.id}", True, (230, 230, 230))
+            self.screen.blit(name_surf, (row_rect.x + 60, row_rect.y + 4))
+
+            kills_surf = self.id_font.render(f"K: {agent.kills}", True, (200, 200, 200))
+            self.screen.blit(kills_surf, (row_rect.x + 60, row_rect.y + 22))
+
+            hp_ratio = max(0, min(1, agent.health / 100))
+            sh_ratio = max(0, min(1, agent.shield / 100))
+            bar_w = 90
+            bar_h = 6
+            bar_x = row_rect.x + row_rect.width - bar_w - 10
+            hp_y = row_rect.y + 6
+            sh_y = hp_y + bar_h + 4
+            pygame.draw.rect(self.screen, (70, 70, 70), (bar_x, hp_y, bar_w, bar_h))
+            pygame.draw.rect(self.screen, (60, 160, 80), (bar_x, hp_y, int(bar_w * hp_ratio), bar_h))
+            pygame.draw.rect(self.screen, (70, 70, 70), (bar_x, sh_y, bar_w, bar_h))
+            pygame.draw.rect(self.screen, (90, 160, 200), (bar_x, sh_y, int(bar_w * sh_ratio), bar_h))
+
+            hp_lbl = self.id_font.render(f"HP {int(agent.health)}", True, (190, 190, 190))
+            sh_lbl = self.id_font.render(f"SH {int(agent.shield)}", True, (190, 190, 190))
+            self.screen.blit(hp_lbl, (bar_x - 48, hp_y - 2))
+            self.screen.blit(sh_lbl, (bar_x - 48, sh_y - 2))
+
+            weapon_name = "(none)"
+            if agent.inventory.weapons:
+                weapon = agent.inventory.weapons[0]
+                weapon_name = getattr(weapon, 'name', str(weapon))
+            action_lbl = agent.current_action or "idle"
+            strategy = agent.last_decision or "?"
+            stat_text = f"{weapon_name} | {action_lbl} | {strategy}"
+            stat_surf = self.id_font.render(stat_text, True, (200, 200, 200))
+            self.screen.blit(stat_surf, (row_rect.x + 60, row_rect.y + self.sidebar_row_h - 18))
