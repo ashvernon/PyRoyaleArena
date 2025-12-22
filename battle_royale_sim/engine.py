@@ -12,19 +12,79 @@ from .telemetry          import flush, log_event
 
 class GameEngine:
     def __init__(self):
-        # — Load configs —
+        # — Pygame setup —
+        pygame.init()
+        pygame.font.init()
+        self.font    = pygame.font.SysFont(None, 24)
+        self.id_font = pygame.font.SysFont(None, 14)
+
+        self.sidebar_w = 360
+        self.sidebar_pad = 10
+        self.sidebar_row_h = 40
+        self.sidebar_top_n = 25
+        self.sidebar_header_h = 36
+
+        # camera for pan & zoom
+        self.cam_offset = [0, 0]
+        self.zoom       = 1.0
+        self.dragging   = False
+        self.last_mouse = (0, 0)
+
+        # load tiles & sprites
+        base_dir        = os.path.dirname(__file__)
+        self.grass_tex  = pygame.image.load(os.path.join(base_dir, "assets", "pygrass_tile.png")).convert()
+        self.floor_tex  = pygame.image.load(os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")).convert()
+        self.agent_sprite = pygame.image.load(os.path.join(base_dir, "assets", "agent_sprite.png")).convert_alpha()
+
+        # scatterable assets (trees, rocks, grass)
+        def load_all(subdir):
+            path = os.path.join(base_dir, "assets", subdir)
+            return [pygame.image.load(os.path.join(path, f)).convert_alpha()
+                    for f in os.listdir(path) if f.endswith(".png")]
+
+        self.tree_textures  = load_all("trees")
+        self.rock_textures  = load_all("rocks")
+        self.grass_textures = load_all("grass")
+
+        self.clock = pygame.time.Clock()
+        pygame.display.set_caption("Battle Royale Simulation")
+
+        self._start_match()
+
+    def _load_configs(self):
         map_cfg       = yaml.safe_load(open('config/map.yaml'))
         buildings_cfg = yaml.safe_load(open('config/buildings.yaml'))
         storm_cfg     = yaml.safe_load(open('config/storm.yaml'))
         loot_cfg      = yaml.safe_load(open('config/loot_table.yaml'))
         agents_cfg    = yaml.safe_load(open('config/agents.yaml'))
-
         map_cfg['buildings'] = buildings_cfg.get('buildings', [])
+        return map_cfg, storm_cfg, loot_cfg, agents_cfg
+
+    def _start_match(self):
+        map_cfg, storm_cfg, loot_cfg, agents_cfg = self._load_configs()
 
         # — Init subsystems —
         self.world   = World(map_cfg)
         self.storm   = Storm(storm_cfg['phases'], self.world)
         self.spawner = LootSpawner(loot_cfg, self.world)
+
+        # screen shows the viewport
+        self.world_w = int(self.world.width)
+        self.world_h = int(self.world.height)
+        self.screen = pygame.display.set_mode(
+            (self.world_w + self.sidebar_w, self.world_h)
+        )
+
+        # world_surf holds the entire 2km×2km world (in world pixels)
+        self.world_surf = pygame.Surface(
+            (int(self.world.width), int(self.world.height))
+        )
+
+        # overlay for storm shading (reused each frame)
+        self.overlay = pygame.Surface(
+            (int(self.world.width), int(self.world.height)),
+            pygame.SRCALPHA
+        )
 
         # — Create agents —
         self.agents = []
@@ -55,57 +115,23 @@ class GameEngine:
         self.shots        = []
         self.total_agents = len(self.agents)
 
-        # — Pygame setup —
-        pygame.init()
-        pygame.font.init()
-        self.font    = pygame.font.SysFont(None, 24)
-        self.id_font = pygame.font.SysFont(None, 14)
+        # match lifecycle & stats
+        self.game_state   = "RUNNING"
+        self.game_over_tick = None
+        self.winner = None
+        self.match_stats = {}
+        self.eliminated_agents = []
+        self.report_printed = False
+        self.ticks = 0
+        self.initial_agent_count = len(self.agents)
+        self.total_shots_fired = 0
+        self.total_loot_spawned = len(self.loot_items)
 
-        self.world_w = int(self.world.width)
-        self.world_h = int(self.world.height)
-        self.sidebar_w = 360
-        self.sidebar_pad = 10
-        self.sidebar_row_h = 40
-        self.sidebar_top_n = 25
-        self.sidebar_header_h = 36
-
-        # screen shows the viewport
-        self.screen = pygame.display.set_mode(
-            (self.world_w + self.sidebar_w, self.world_h)
-        )
-
-        # world_surf holds the entire 2km×2km world (in world pixels)
-        self.world_surf = pygame.Surface(
-            (int(self.world.width), int(self.world.height))
-        )
-
-        # camera for pan & zoom
+        # camera reset
         self.cam_offset = [0, 0]
         self.zoom       = 1.0
         self.dragging   = False
         self.last_mouse = (0, 0)
-
-        # load tiles & sprites
-        base_dir        = os.path.dirname(__file__)
-        self.grass_tex  = pygame.image.load(os.path.join(base_dir, "assets", "pygrass_tile.png")).convert()
-        self.floor_tex  = pygame.image.load(os.path.join(base_dir, "assets", "wood_floor_tile_dark_32.png")).convert()
-        self.agent_sprite = pygame.image.load(os.path.join(base_dir, "assets", "agent_sprite.png")).convert_alpha()
-
-        # overlay for storm shading (reused each frame)
-        self.overlay = pygame.Surface(
-            (int(self.world.width), int(self.world.height)),
-            pygame.SRCALPHA
-        )
-
-        # scatterable assets (trees, rocks, grass)
-        def load_all(subdir):
-            path = os.path.join(base_dir, "assets", subdir)
-            return [pygame.image.load(os.path.join(path, f)).convert_alpha()
-                    for f in os.listdir(path) if f.endswith(".png")]
-
-        self.tree_textures  = load_all("trees")
-        self.rock_textures  = load_all("rocks")
-        self.grass_textures = load_all("grass")
 
         # counts from config
         tree_count  = map_cfg.get("tree_count", 50)
@@ -119,16 +145,22 @@ class GameEngine:
         self.world.trees = self.tree_positions
         self.world.rocks = self.rock_positions
 
-        pygame.display.set_caption("Battle Royale Simulation")
-        self.clock = pygame.time.Clock()
-
     def run(self):
         running = True
-        while running and len(self.agents) > 1:
+        while running:
             for e in pygame.event.get():
                 # Quit
                 if e.type == pygame.QUIT:
                     running = False
+
+                elif e.type == pygame.KEYDOWN:
+                    if e.key in (pygame.K_ESCAPE, pygame.K_q):
+                        running = False
+                    elif self.game_state == "GAME_OVER" and e.key == pygame.K_r:
+                        self._start_match()
+
+                if self.game_state != "RUNNING":
+                    continue
 
                 # Mouse button pressed
                 elif e.type == pygame.MOUSEBUTTONDOWN:
@@ -191,6 +223,11 @@ class GameEngine:
 
 
     def update(self):
+        if self.game_state != "RUNNING":
+            return
+
+        self.ticks += 1
+
         # 1) Storm
         self.storm.update()
 
@@ -201,7 +238,9 @@ class GameEngine:
                 it for it in new_loot
                 if self.storm.in_safe_zone(it['pos'])
             ]
-            self.loot_items.extend(inside)
+            if inside:
+                self.loot_items.extend(inside)
+                self.total_loot_spawned += len(inside)
 
         # 3) Agent actions: decide, move/attack, pickup, storm damage & elimination
         self.shots = []
@@ -209,15 +248,17 @@ class GameEngine:
             shot = a.tick(self.agents, self.loot_items)
             if shot:
                 self.shots.append(shot)
-            if a.health <= 0:
-                log_event('eliminate', {'agent': a.id})
-                self.agents.remove(a)
 
-        # 4) Post-combat elimination (in case attack killed someone)
         for a in self.agents[:]:
             if a.health <= 0:
                 log_event('eliminate', {'agent': a.id})
+                self._record_elimination(a)
                 self.agents.remove(a)
+                if self.selected_agent and self.selected_agent.id == a.id:
+                    self.selected_agent = None
+
+        self.total_shots_fired += len(self.shots)
+        self._evaluate_game_over()
 
     def render(self):
         # 0) Draw entire world into world_surf
@@ -397,6 +438,8 @@ class GameEngine:
 
         self._render_sidebar()
 
+        if self.game_state == "GAME_OVER":
+            self._render_game_over_overlay()
 
         # 10) Flip display
         pygame.display.flip()
@@ -407,6 +450,42 @@ class GameEngine:
             key=lambda a: (-a.kills, -(a.health + a.shield), a.id)
         )
         return ranked[:self.sidebar_top_n]
+
+    def _render_game_over_overlay(self):
+        panel_w = 420
+        panel_h = 200
+        panel_x = (self.world_w - panel_w) // 2
+        panel_y = (self.world_h - panel_h) // 2
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 190))
+        pygame.draw.rect(panel, (200, 200, 200), panel.get_rect(), 2)
+
+        winner_text = "Winner: "
+        if self.winner:
+            weapon = "(none)"
+            if self.winner.inventory.weapons:
+                weapon = getattr(self.winner.inventory.weapons[0], 'name', str(self.winner.inventory.weapons[0]))
+            winner_text += (
+                f"Agent #{self.winner.id} | Kills: {self.winner.kills} | "
+                f"HP: {int(self.winner.health)} | Shield: {int(self.winner.shield)} | Weapon: {weapon}"
+            )
+        else:
+            winner_text += "No winner"
+
+        lines = [
+            "Match Over",
+            winner_text,
+            f"Duration: {self.match_stats.get('duration_ticks', self.ticks)} ticks "
+            f"({self.match_stats.get('duration_seconds', self.ticks / TICK_RATE):.1f}s)",
+            "Press Q or ESC to quit",
+            "Press R to restart",
+        ]
+
+        for idx, text in enumerate(lines):
+            surf = self.font.render(text, True, (240, 240, 240))
+            panel.blit(surf, (20, 20 + idx * 32))
+
+        self.screen.blit(panel, (panel_x, panel_y))
 
     def _handle_sidebar_click(self, sx, sy):
         if sx < self.world_w:
@@ -493,3 +572,158 @@ class GameEngine:
             stat_text = f"{weapon_name} | {action_lbl} | {strategy}"
             stat_surf = self.id_font.render(stat_text, True, (200, 200, 200))
             self.screen.blit(stat_surf, (row_rect.x + 60, row_rect.y + self.sidebar_row_h - 18))
+
+    def _record_elimination(self, agent):
+        killer = agent.last_damaged_by
+        cause = "storm" if killer is None and not self.storm.in_safe_zone(agent.pos) else "combat"
+        self.eliminated_agents.append({
+            "tick": self.ticks,
+            "id": agent.id,
+            "killer": killer,
+            "kills": agent.kills,
+            "survival_time": self.ticks,
+            "cause": cause
+        })
+
+    def _evaluate_game_over(self):
+        if self.game_state != "RUNNING":
+            return
+
+        if len(self.agents) <= 1:
+            self.game_state = "GAME_OVER"
+            self.game_over_tick = self.ticks
+            self.winner = self.agents[0] if self.agents else None
+            self._collect_match_stats()
+            self.print_match_report()
+            flush()
+
+    def _collect_match_stats(self):
+        duration_ticks = self.game_over_tick if self.game_over_tick is not None else self.ticks
+        duration_seconds = duration_ticks / TICK_RATE
+        eliminations = self.initial_agent_count - len(self.agents)
+        storm_phases_completed = self.storm.current_phase + (1 if self.storm.ticks_in_phase > 0 else 0)
+        storm_phases_completed = min(storm_phases_completed, len(self.storm.phases))
+
+        all_agents = []
+        for agent in self.agents:
+            weapon = None
+            if agent.inventory.weapons:
+                weapon = getattr(agent.inventory.weapons[0], 'name', str(agent.inventory.weapons[0]))
+            all_agents.append({
+                "id": agent.id,
+                "kills": agent.kills,
+                "health": agent.health,
+                "shield": agent.shield,
+                "weapon": weapon
+            })
+
+        for elim in self.eliminated_agents:
+            all_agents.append({
+                "id": elim["id"],
+                "kills": elim["kills"],
+                "health": 0,
+                "shield": 0,
+                "weapon": None
+            })
+
+        top_killers = sorted(
+            all_agents,
+            key=lambda entry: (-entry["kills"], entry["id"])
+        )[:10]
+
+        elimination_timeline = sorted(self.eliminated_agents, key=lambda e: e["tick"])
+        survival_times = [entry["survival_time"] for entry in elimination_timeline]
+        average_survival = (
+            sum(survival_times) / len(survival_times)
+            if survival_times else duration_ticks
+        )
+
+        self.match_stats = {
+            "duration_ticks": duration_ticks,
+            "duration_seconds": duration_seconds,
+            "initial_agents": self.initial_agent_count,
+            "remaining_agents": len(self.agents),
+            "eliminations": eliminations,
+            "storm_phases_completed": storm_phases_completed,
+            "storm_phase_total": len(self.storm.phases),
+            "final_storm_radius": self.storm.radius,
+            "total_shots_fired": self.total_shots_fired,
+            "total_loot_spawned": self.total_loot_spawned,
+            "remaining_loot": len(self.loot_items),
+            "top_killers": top_killers,
+            "elimination_timeline": elimination_timeline,
+            "average_survival_time": average_survival,
+        }
+
+        if self.winner:
+            weapon = None
+            if self.winner.inventory.weapons:
+                weapon = getattr(self.winner.inventory.weapons[0], 'name', str(self.winner.inventory.weapons[0]))
+            self.match_stats["winner"] = {
+                "id": self.winner.id,
+                "kills": self.winner.kills,
+                "health": self.winner.health,
+                "shield": self.winner.shield,
+                "weapon": weapon,
+            }
+        else:
+            self.match_stats["winner"] = None
+
+    def print_match_report(self):
+        if self.report_printed:
+            return
+
+        if not self.match_stats:
+            self._collect_match_stats()
+
+        self.report_printed = True
+        stats = self.match_stats
+        lines = []
+        lines.append("=== Match Report ===")
+        if stats["winner"]:
+            winner = stats["winner"]
+            weapon = winner["weapon"] or "(none)"
+            lines.append(
+                f"Winner: Agent #{winner['id']} | Kills: {winner['kills']} | "
+                f"HP: {winner['health']:.1f} | Shield: {winner['shield']:.1f} | Weapon: {weapon}"
+            )
+        else:
+            lines.append("Winner: No winner (all eliminated)")
+
+        lines.append(
+            f"Duration: {stats['duration_ticks']} ticks ({stats['duration_seconds']:.1f} seconds)"
+        )
+        lines.append(
+            f"Agents: start {stats['initial_agents']}, remaining {stats['remaining_agents']}, "
+            f"eliminations {stats['eliminations']}"
+        )
+        lines.append(
+            f"Storm: {stats['storm_phases_completed']}/{stats['storm_phase_total']} phases, "
+            f"final radius {stats['final_storm_radius']:.1f}"
+        )
+        lines.append(
+            f"Shots fired: {stats['total_shots_fired']} | Loot spawned: {stats['total_loot_spawned']} "
+            f"| Loot remaining: {stats['remaining_loot']}"
+        )
+
+        lines.append("Top eliminations (up to 10):")
+        for entry in stats["top_killers"]:
+            weapon = entry.get("weapon") or "(unknown)"
+            lines.append(
+                f"  Agent #{entry['id']} — Kills: {entry['kills']} | Weapon: {weapon}"
+            )
+
+        if stats["elimination_timeline"]:
+            lines.append("Elimination timeline:")
+            for elim in stats["elimination_timeline"]:
+                killer = elim["killer"]
+                killer_text = "Storm/unknown" if killer is None else f"Agent #{killer}"
+                lines.append(
+                    f"  Tick {elim['tick']}: Agent #{elim['id']} eliminated by {killer_text} "
+                    f"(kills: {elim['kills']})"
+                )
+
+        lines.append(
+            f"Average survival time: {stats['average_survival_time']:.1f} ticks"
+        )
+        print("\n".join(lines))
