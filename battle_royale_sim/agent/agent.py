@@ -17,7 +17,6 @@ class Agent:
         self.world          = world
         self.storm          = storm
         self.inventory      = Inventory()
-        self.behavior       = Behavior(self, world, storm, behavior_config)
         self.cooldown_ticks = 0
         self.color = color
         self.current_action = None
@@ -45,6 +44,7 @@ class Agent:
             'wall_avoidance_strength': 0.8,
             'avoidance_probe_distance': 8.0,
         }
+        self.behavior       = Behavior(self, world, storm, behavior_config)
 
     def tick(self, agents, loot_items):
         """Update agent state for a single tick.
