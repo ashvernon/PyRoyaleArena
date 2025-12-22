@@ -8,3 +8,10 @@ make_floor_wood_dark.py
 make_floor_wood_light.py
 .DS_Store
 .vscode/
+
+# Virtual environments
+venv/
+.venv/
+
+# Python caches
+*.pyo
