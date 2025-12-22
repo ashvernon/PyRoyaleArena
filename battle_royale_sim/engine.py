@@ -25,7 +25,7 @@ class GameEngine:
         self.sidebar_w = 360
         self.sidebar_pad = 10
         self.sidebar_row_h = 40
-        self.sidebar_top_n = 25
+        self.sidebar_top_n = 10
         self.sidebar_header_h = 36
 
         # camera for pan & zoom
@@ -515,7 +515,7 @@ class GameEngine:
         bg_rect = pygame.Rect(sidebar_x, 0, self.sidebar_w, self.world_h)
         pygame.draw.rect(self.screen, (24, 24, 24), bg_rect)
 
-        header = self.font.render("Leaderboard (Top 25)", True, (240, 240, 240))
+        header = self.font.render("Leaderboard (Top 10)", True, (240, 240, 240))
         self.screen.blit(header, (sidebar_x + self.sidebar_pad, self.sidebar_pad))
         count_lbl = self.id_font.render(
             f"Alive: {len(self.agents)} / {self.total_agents}", True, (200, 200, 200)

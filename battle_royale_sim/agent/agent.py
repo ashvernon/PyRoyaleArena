@@ -94,7 +94,7 @@ class Agent:
         if not self.inventory.weapons:
             return None
 
-        weapon  = self.inventory.weapons[0]
+        weapon = max(self.inventory.weapons, key=lambda w: w.range)
         enemies = [a for a in agents if a.id != self.id and a.health > 0]
         if not enemies:
             return None

@@ -48,50 +48,65 @@ class Behavior:
 
     def find_building_containing(self, pos):
         for b in self.world.buildings:
-            xs = [w['x'] for w in b.get('walls',[])]
-            ws = [w['width'] for w in b.get('walls',[])]
-            ys = [w['y'] for w in b.get('walls',[])]
-            hs = [w['height'] for w in b.get('walls',[])]
-            minx = min(xs)
-            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
-            miny = min(ys)
-            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+            bbox = self._building_bbox(b)
+            bbox = self._building_bbox(b)
+            if not bbox:
+                continue
+            minx, maxx, miny, maxy = bbox            
             if minx <= pos[0] <= maxx and miny <= pos[1] <= maxy:
                 return b
         return None
 
+    
+    def _building_bbox(self, building):
+        walls = building.get('walls', [])
+        if not walls:
+            return None
+
+        xs = [w.get('x') for w in walls]
+        ys = [w.get('y') for w in walls]
+        ws = [w.get('width') for w in walls]
+        hs = [w.get('height') for w in walls]
+
+        # Guard against missing keys / None
+        if any(v is None for v in xs + ys + ws + hs):
+            return None
+
+        minx = min(xs)
+        maxx = max(x + w for x, w in zip(xs, ws))
+        miny = min(ys)
+        maxy = max(y + h for y, h in zip(ys, hs))
+        return (minx, maxx, miny, maxy)
+
+
     def nearest_door(self, agent_pos, building):
         doors = building.get('doors', [])
         if not doors:
-            xs = [w['x'] for w in building.get('walls',[])]
-            ws = [w['width'] for w in building.get('walls',[])]
-            ys = [w['y'] for w in building.get('walls',[])]
-            hs = [w['height'] for w in building.get('walls',[])]
-            minx = min(xs)
-            maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
-            miny = min(ys)
-            maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+            bbox = self._building_bbox(building)
+            if not bbox:
+                return agent_pos  # safe fallback
+            minx, maxx, miny, maxy = bbox
             return ((minx + maxx) / 2, (miny + maxy) / 2)
+
         return min(
             [(d['x'] + d['width'] / 2, d['y'] + d['height'] / 2) for d in doors],
             key=lambda pos: distance(agent_pos, pos)
         )
 
+
     def random_point_in_building(self, building):
-        xs = [w['x'] for w in building.get('walls',[])]
-        ws = [w['width'] for w in building.get('walls',[])]
-        ys = [w['y'] for w in building.get('walls',[])]
-        hs = [w['height'] for w in building.get('walls',[])]
-        minx = min(xs)
-        maxx = max(x0 + w0 for x0, w0 in zip(xs, ws))
-        miny = min(ys)
-        maxy = max(y0 + h0 for y0, h0 in zip(ys, hs))
+        bbox = self._building_bbox(building)
+        if not bbox:
+            return self.agent.pos  # safe fallback
+
+        minx, maxx, miny, maxy = bbox
         for _ in range(10):
             px = random.uniform(minx + 8, maxx - 8)
             py = random.uniform(miny + 8, maxy - 8)
             if not self.world.in_wall((px, py)):
                 return (px, py)
         return ((minx + maxx) / 2, (miny + maxy) / 2)
+
 
     def select_action(self, agents, loot_items):
         self.tick_counter += 1
@@ -286,7 +301,9 @@ class Behavior:
             return False
 
         if self.waypoint_kind == 'loot':
-            return any(distance(it['pos'], self.current_waypoint) < 1e-6 for it in loot_items)
+            tol = 6.0  # ~a few pixels/cells; tune if needed
+            return any(distance(it['pos'], self.current_waypoint) <= tol for it in loot_items)
+
 
         return True
 
@@ -391,8 +408,10 @@ class Behavior:
         if lookahead <= 0:
             target_radius = self.storm.radius
         else:
-            target_phase = min(self.storm.current_phase + lookahead, len(self.storm.phases))
+            max_phase = max(0, len(self.storm.phases) - 1)
+            target_phase = min(self.storm.current_phase + lookahead, max_phase)
             target_radius = self.storm.radius_for_phase_start(target_phase)
+
 
         required_distance = max(0.0, dist_center - target_radius)
         time_left = self.storm.time_left_in_phase_seconds()
