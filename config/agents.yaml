@@ -9,3 +9,11 @@ decision_switch_min_delta: 0.15
 decision_switch_cooldown_ticks: 8
 decision_emergency_health: 0.25
 decision_emergency_enemy_radius: 35
+
+# Navigation intent & recovery
+waypoint_reach_radius: 0.9    # stop_radius * 1.5 (with stop_radius=0.6)
+waypoint_timeout_ticks: 180   # ~3 seconds @ 60 ticks/s
+min_progress_per_tick: 0.02
+stuck_ticks: 45               # ~0.75 seconds @ 60 ticks/s
+waypoint_nudge_distance: 0.48 # 0.8 * stop_radius
+waypoint_max_retries: 2
