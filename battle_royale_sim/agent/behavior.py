@@ -1,7 +1,8 @@
-import random
 import math
 import time
+import random
 from ..utils import distance
+from ..telemetry import log_event
 
 class Behavior:
     def __init__(self, agent, world, storm, behavior_config=None):
@@ -16,6 +17,11 @@ class Behavior:
         self.switch_cooldown = cfg.get('decision_switch_cooldown_ticks', 8)
         self.emergency_health = cfg.get('decision_emergency_health', 0.25)
         self.panic_radius = cfg.get('decision_emergency_enemy_radius', 35)
+        self.storm_anticipation_enabled = cfg.get('decision_storm_anticipation_enabled', False)
+        self.storm_escape_margin = cfg.get('decision_storm_escape_margin', 1.0)
+        self.storm_panic_margin = cfg.get('decision_storm_panic_margin', 0.9)
+        self.storm_weight = cfg.get('decision_storm_weight', 1.0)
+        self.storm_lookahead_phases = int(cfg.get('decision_storm_lookahead_phases', 0))
         self.action_locked_until_tick = 0
         self.last_switch_tick = -math.inf
         self.current_action = None
@@ -121,6 +127,14 @@ class Behavior:
         if radius > 0:
             boundary_score = 1 - abs(dist_center - radius) / radius
 
+        storm_pressure = 0.0
+        panic_escape = False
+        storm_state = None
+        if self.storm_anticipation_enabled:
+            storm_state = self._evaluate_storm_escape(dist_center)
+            storm_pressure = storm_state['pressure']
+            panic_escape = storm_state['panic']
+
         # 5) Hide in building utility (if low health and not already in a building)
         hide_score = 0.0
         nearest_building_center = None
@@ -158,6 +172,10 @@ class Behavior:
             'roam': 0.55
         }
 
+        if storm_pressure > 0:
+            scores['flee'] += storm_pressure * self.storm_weight
+            scores['boundary'] += 0.5 * storm_pressure * self.storm_weight
+
         best_action, best_score = max(scores.items(), key=lambda kv: kv[1])
 
         current_score = scores.get(self.current_action, -math.inf)
@@ -165,6 +183,7 @@ class Behavior:
             a.health / 100.0 <= self.emergency_health or
             d_enemy <= self.panic_radius
         )
+        in_emergency_combat = d_enemy <= self.panic_radius
         locked = self.tick_counter < self.action_locked_until_tick
         in_cooldown = (self.tick_counter - self.last_switch_tick) < self.switch_cooldown
 
@@ -178,10 +197,22 @@ class Behavior:
             if best_score >= current_score + self.switch_min_delta:
                 chosen_action = best_action
 
-        if chosen_action != self.current_action:
+        panic_triggered = False
+        if panic_escape and not in_emergency_combat:
+            chosen_action = 'flee'
+            panic_triggered = True
+
+        if panic_triggered or chosen_action != self.current_action:
             self.current_action = chosen_action
             self.last_switch_tick = self.tick_counter
             self.action_locked_until_tick = self.tick_counter + self.commit_ticks
+            if panic_triggered:
+                log_event('storm_panic_rotate', {
+                    'agent': a.id,
+                    'phase': self.storm.current_phase,
+                    'time_left_s': storm_state['time_left'] if storm_state else None,
+                    'escape_ratio': storm_state['escape_ratio'] if storm_state else None
+                })
 
         action = self.current_action
 
@@ -355,3 +386,36 @@ class Behavior:
         return self.no_progress_ticks >= self.nav_cfg['stuck_ticks']
 
 
+    def _evaluate_storm_escape(self, dist_center):
+        lookahead = max(0, self.storm_lookahead_phases)
+        if lookahead <= 0:
+            target_radius = self.storm.radius
+        else:
+            target_phase = min(self.storm.current_phase + lookahead, len(self.storm.phases))
+            target_radius = self.storm.radius_for_phase_start(target_phase)
+
+        required_distance = max(0.0, dist_center - target_radius)
+        time_left = self.storm.time_left_in_phase_seconds()
+        max_speed = self.agent.locomotion_cfg.get('sprint_speed', 0.0)
+        max_travel = max_speed * time_left
+        eps = 1e-3
+        if required_distance <= eps:
+            escape_ratio = float('inf')
+        else:
+            escape_ratio = max_travel / (required_distance + eps)
+
+        pressure = 0.0
+        if required_distance > eps and escape_ratio < self.storm_escape_margin:
+            pressure = max(0.0, (self.storm_escape_margin - escape_ratio) / self.storm_escape_margin)
+
+        panic = required_distance > eps and escape_ratio < self.storm_panic_margin
+
+        return {
+            'target_radius': target_radius,
+            'required_distance': required_distance,
+            'time_left': time_left,
+            'max_travel': max_travel,
+            'escape_ratio': escape_ratio,
+            'pressure': pressure,
+            'panic': panic
+        }
