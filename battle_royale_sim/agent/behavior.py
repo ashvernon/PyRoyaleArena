@@ -4,12 +4,22 @@ import time
 from ..utils import distance
 
 class Behavior:
-    def __init__(self, agent, world, storm):
+    def __init__(self, agent, world, storm, behavior_config=None):
         self.agent = agent
         self.world = world
         self.storm = storm
         self.last_patrol_time = 0
         self.patrol_target = None
+        cfg = behavior_config or {}
+        self.commit_ticks = cfg.get('decision_commit_ticks', 6)
+        self.switch_min_delta = cfg.get('decision_switch_min_delta', 0.15)
+        self.switch_cooldown = cfg.get('decision_switch_cooldown_ticks', 8)
+        self.emergency_health = cfg.get('decision_emergency_health', 0.25)
+        self.panic_radius = cfg.get('decision_emergency_enemy_radius', 35)
+        self.action_locked_until_tick = 0
+        self.last_switch_tick = -math.inf
+        self.current_action = None
+        self.tick_counter = 0
 
     def find_building_containing(self, pos):
         for b in self.world.buildings:
@@ -59,6 +69,7 @@ class Behavior:
         return ((minx + maxx) / 2, (miny + maxy) / 2)
 
     def select_action(self, agents, loot_items):
+        self.tick_counter += 1
         a = self.agent
 
         # 1) Attack utility
@@ -128,7 +139,32 @@ class Behavior:
             'roam': 0.55
         }
 
-        action, _ = max(scores.items(), key=lambda kv: kv[1])
+        best_action, best_score = max(scores.items(), key=lambda kv: kv[1])
+
+        current_score = scores.get(self.current_action, -math.inf)
+        emergency = (
+            a.health / 100.0 <= self.emergency_health or
+            d_enemy <= self.panic_radius
+        )
+        locked = self.tick_counter < self.action_locked_until_tick
+        in_cooldown = (self.tick_counter - self.last_switch_tick) < self.switch_cooldown
+
+        chosen_action = self.current_action or best_action
+
+        if emergency:
+            chosen_action = best_action
+        elif self.current_action is None:
+            chosen_action = best_action
+        elif not locked and not in_cooldown:
+            if best_score >= current_score + self.switch_min_delta:
+                chosen_action = best_action
+
+        if chosen_action != self.current_action:
+            self.current_action = chosen_action
+            self.last_switch_tick = self.tick_counter
+            self.action_locked_until_tick = self.tick_counter + self.commit_ticks
+
+        action = self.current_action
 
 
         # Smart door entry logic for loot
@@ -182,10 +218,7 @@ class Behavior:
             if building:
                 target = self.nearest_door(a.pos, building)
 
-        self.last_action = action
         return action, target
-
-
 
 
 

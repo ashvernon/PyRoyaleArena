@@ -29,12 +29,21 @@ class GameEngine:
         # — Create agents —
         self.agents = []
         self.selected_agent = None
+        behavior_cfg = {k: v for k, v in agents_cfg.items() if k.startswith("decision_")}
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])
             color = pygame.Color(0)
             color.hsva = (int(360 * i / agents_cfg['count']), 90, 90, 100)
-            self.agents.append(Agent(i, s, l, self.world, self.storm, (color.r, color.g, color.b)))
+            self.agents.append(Agent(
+                i,
+                s,
+                l,
+                self.world,
+                self.storm,
+                (color.r, color.g, color.b),
+                behavior_cfg
+            ))
 
         # — State holders —
         self.loot_items   = self.spawner.spawn_initial_loot()
