@@ -1,17 +1,17 @@
 weapons:
   pistol:
     spawn_chance: 0.20
-    damage: 20
-    fire_rate: 1.0
-    accuracy: 0.6
-    range: 150
+    damage: 18
+    fire_rate: 1.5      # close-range DPS role
+    accuracy: 0.55
+    range: 120
     magazine_size: 6
     reload_time: 1.5
 
   rifle:
     spawn_chance: 0.10
     damage: 35
-    fire_rate: 0.50
+    fire_rate: 0.50     # long-range precision role
     accuracy: 0.8
     range: 250
     magazine_size: 5
