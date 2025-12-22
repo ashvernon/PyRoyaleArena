@@ -2,3 +2,10 @@ count: 100
 
 skill_range: [0.2, 0.8]   # each agent’s aiming/build speed
 luck_range:  [0.1, 0.5]   # RNG bias for loot & crits
+
+# Decision tuning
+decision_commit_ticks: 6
+decision_switch_min_delta: 0.15
+decision_switch_cooldown_ticks: 8
+decision_emergency_health: 0.25
+decision_emergency_enemy_radius: 35
