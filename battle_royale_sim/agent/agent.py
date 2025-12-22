@@ -28,6 +28,7 @@ class Agent:
         self.last_heading_update_tick = -math.inf
         self.move_mode      = 'walk'
         self.tick_counter   = 0
+        self.last_damaged_by = None
         self.locomotion_cfg = {
             'walk_speed': 1.0,
             'jog_speed': 1.6,
@@ -79,6 +80,7 @@ class Agent:
         if not self.storm.in_safe_zone(self.pos):
             dmg = self.storm.damage()
             self.health -= dmg
+            self.last_damaged_by = None
             log_event('storm_damage', {'agent': self.id, 'damage': dmg})
 
         return shot
@@ -110,6 +112,7 @@ class Agent:
         hit_chance = weapon.accuracy * self.skill
         if random.random() <= hit_chance:
             dmg = weapon.damage
+            target.last_damaged_by = self.id
 
             # shields absorb first
             if target.shield > 0:
@@ -119,6 +122,7 @@ class Agent:
 
             # leftover goes to health
             if dmg > 0:
+                target.last_damaged_by = self.id
                 target.health -= dmg
 
                 # —— NEW: count a kill if they dropped to 0 or below —— 
