@@ -9,6 +9,11 @@ decision_switch_min_delta: 0.15
 decision_switch_cooldown_ticks: 8
 decision_emergency_health: 0.25
 decision_emergency_enemy_radius: 35
+decision_storm_anticipation_enabled: true
+decision_storm_escape_margin: 1.15
+decision_storm_panic_margin: 0.95
+decision_storm_weight: 1.0
+decision_storm_lookahead_phases: 1
 
 # Navigation intent & recovery
 waypoint_reach_radius: 0.9    # stop_radius * 1.5 (with stop_radius=0.6)

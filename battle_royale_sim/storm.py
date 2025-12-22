@@ -35,8 +35,24 @@ class Storm:
                 self.current_phase += 1
                 self.ticks_in_phase = 0
 
+    def time_left_in_phase_seconds(self):
+        phase = self.phases[self.current_phase]
+        total_ticks = (phase['hold'] + phase['shrink']) * TICK_RATE
+        remaining = max(0, total_ticks - self.ticks_in_phase)
+        return remaining / TICK_RATE
+
     def in_safe_zone(self, pos):
         return distance(pos, self.center) <= self.radius
 
     def damage(self):
         return self.phases[self.current_phase]['damage']
+
+    def radius_for_phase_start(self, phase_index):
+        total = len(self.phases)
+        if phase_index <= 0:
+            frac = 0.0
+        elif phase_index >= total:
+            return 0.0
+        else:
+            frac = phase_index / total
+        return self.initial_radius * (1 - frac)
