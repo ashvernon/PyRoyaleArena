@@ -18,6 +18,10 @@ class GameEngine:
         self.font    = pygame.font.SysFont(None, 24)
         self.id_font = pygame.font.SysFont(None, 14)
 
+        # Create a tiny placeholder display so surface.convert/convert_alpha
+        # calls succeed before we know the real window size.
+        self.screen = pygame.display.set_mode((1, 1))
+
         self.sidebar_w = 360
         self.sidebar_pad = 10
         self.sidebar_row_h = 40
