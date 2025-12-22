@@ -29,7 +29,12 @@ class GameEngine:
         # — Create agents —
         self.agents = []
         self.selected_agent = None
-        behavior_cfg = {k: v for k, v in agents_cfg.items() if k.startswith("decision_")}
+        behavior_cfg = {
+            k: v for k, v in agents_cfg.items()
+            if k.startswith("decision_") or k.startswith("waypoint_") or k in (
+                "min_progress_per_tick", "stuck_ticks"
+            )
+        }
         for i in range(agents_cfg['count']):
             s = random.uniform(*agents_cfg['skill_range'])
             l = random.uniform(*agents_cfg['luck_range'])

@@ -21,6 +21,25 @@ class Behavior:
         self.current_action = None
         self.tick_counter = 0
 
+        # Navigation intent & recovery
+        stop_radius = self.agent.locomotion_cfg['stop_radius']
+        self.nav_cfg = {
+            'waypoint_reach_radius': cfg.get('waypoint_reach_radius', stop_radius * 1.5),
+            'waypoint_timeout_ticks': cfg.get('waypoint_timeout_ticks', 180),
+            'min_progress_per_tick': cfg.get('min_progress_per_tick', 0.02),
+            'stuck_ticks': cfg.get('stuck_ticks', 45),
+            'waypoint_nudge_distance': cfg.get('waypoint_nudge_distance', stop_radius * 0.8),
+            'waypoint_max_retries': cfg.get('waypoint_max_retries', 2),
+        }
+        self.current_waypoint = None
+        self.waypoint_kind = None
+        self.waypoint_set_tick = 0
+        self.waypoint_timeout_tick = 0
+        self.last_waypoint_dist = math.inf
+        self.no_progress_ticks = 0
+        self.stuck_retries = 0
+        self.navigation_action = None
+
     def find_building_containing(self, pos):
         for b in self.world.buildings:
             xs = [w['x'] for w in b.get('walls',[])]
@@ -168,31 +187,109 @@ class Behavior:
 
 
         # Smart door entry logic for loot
-        if action == 'attack' and enemies:
-            target = min(enemies, key=lambda e: distance(a.pos, e.pos)).pos
-        elif action == 'loot' and visible_loot:
+        if action == 'attack':
+            self._clear_waypoint()
+            if enemies:
+                target = min(enemies, key=lambda e: distance(a.pos, e.pos)).pos
+            else:
+                target = a.pos
+            return action, target
+
+        target = self._get_navigation_target(action, visible_loot, loot_items, nearest_building_center)
+        return action, target
+
+
+    def _get_navigation_target(self, action, visible_loot, loot_items, nearest_building_center):
+        if action != self.navigation_action:
+            self._clear_waypoint()
+            self.navigation_action = action
+
+        if self.current_waypoint:
+            dist = distance(self.agent.pos, self.current_waypoint)
+            reached = dist <= self.nav_cfg['waypoint_reach_radius']
+            stuck = self._update_progress(dist)
+            timed_out = self.tick_counter >= self.waypoint_timeout_tick
+            still_valid = self._waypoint_is_valid(action, loot_items)
+
+            if reached:
+                self._clear_waypoint()
+            elif timed_out or stuck or not still_valid:
+                self._recover_waypoint(action, visible_loot, loot_items, nearest_building_center)
+        else:
+            self.last_waypoint_dist = math.inf
+            self.no_progress_ticks = 0
+
+        if not self.current_waypoint:
+            self._pick_new_waypoint(action, visible_loot, loot_items, nearest_building_center, reset_retries=True)
+
+        return self.current_waypoint or self.agent.pos
+
+
+    def _recover_waypoint(self, action, visible_loot, loot_items, nearest_building_center):
+        # First attempt: nudge the current waypoint slightly to escape corners/doorways
+        if self.current_waypoint and self.stuck_retries == 0:
+            ang = random.random() * 2 * math.pi
+            nudge = (
+                math.cos(ang) * self.nav_cfg['waypoint_nudge_distance'],
+                math.sin(ang) * self.nav_cfg['waypoint_nudge_distance']
+            )
+            nudged = (self.current_waypoint[0] + nudge[0], self.current_waypoint[1] + nudge[1])
+            self.stuck_retries += 1
+            self._set_waypoint(nudged, self.waypoint_kind, reset_retries=False)
+            return
+
+        self.stuck_retries += 1
+        if self.stuck_retries <= self.nav_cfg['waypoint_max_retries']:
+            self._pick_new_waypoint(action, visible_loot, loot_items, nearest_building_center, reset_retries=False)
+        else:
+            # Escalation guard: fall back to a fresh roam point
+            self._set_waypoint(self.world.random_pos(), 'roam', reset_retries=True)
+
+
+    def _waypoint_is_valid(self, action, loot_items):
+        if not self.current_waypoint:
+            return False
+
+        x, y = self.current_waypoint
+        if not (0 <= x <= self.world.width and 0 <= y <= self.world.height):
+            return False
+
+        if self.waypoint_kind == 'loot':
+            return any(distance(it['pos'], self.current_waypoint) < 1e-6 for it in loot_items)
+
+        return True
+
+
+    def _pick_new_waypoint(self, action, visible_loot, loot_items, nearest_building_center, reset_retries=True):
+        a = self.agent
+
+        if action == 'loot' and visible_loot:
             target_loot = min(visible_loot, key=lambda it: distance(a.pos, it['pos']))
             loot_pos = target_loot['pos']
             building = self.find_building_containing(loot_pos)
             agent_inside = self.world.in_building(a.pos)
             loot_inside = self.world.in_building(loot_pos)
             if building and loot_inside and not agent_inside:
-                target = self.nearest_door(a.pos, building)
+                waypoint = self.nearest_door(a.pos, building)
+                kind = 'door'
             else:
-                target = loot_pos
+                waypoint = loot_pos
+                kind = 'loot'
         elif action == 'flee':
-            target = self.world.center
+            waypoint = self.world.center
+            kind = 'roam'
         elif action == 'boundary':
             angle = random.random() * 2 * math.pi
-            radius = self.storm.radius
-            target = (
+            radius = self.storm.radius or max(self.world.width, self.world.height) / 2
+            waypoint = (
                 self.world.center[0] + math.cos(angle) * radius,
                 self.world.center[1] + math.sin(angle) * radius
             )
+            kind = 'roam'
         elif action == 'hide' and nearest_building_center:
-            target = nearest_building_center
+            waypoint = nearest_building_center
+            kind = 'cover'
         elif action == 'ambush':
-            # Patrol randomly within the building every few seconds
             building = self.find_building_containing(a.pos)
             now = time.time()
             if (
@@ -205,20 +302,56 @@ class Behavior:
                     self.last_patrol_time = now
                 else:
                     self.patrol_target = a.pos
-            target = self.patrol_target
+            waypoint = self.patrol_target
+            kind = 'cover'
         else:
-            target = self.world.random_pos()
+            waypoint = self.world.random_pos()
+            kind = 'roam'
 
-        # --- Exit by door logic: if agent is inside, but target is outside, exit via door first ---
+        # Exit by door logic: if agent is inside, but target is outside, exit via door first
         if (
+            waypoint is not None and
             self.world.in_building(a.pos) and
-            not self.world.in_building(target)
+            not self.world.in_building(waypoint)
         ):
             building = self.find_building_containing(a.pos)
             if building:
-                target = self.nearest_door(a.pos, building)
+                waypoint = self.nearest_door(a.pos, building)
+                kind = 'door'
 
-        return action, target
+        if waypoint:
+            self._set_waypoint(waypoint, kind, reset_retries=reset_retries)
 
+
+    def _set_waypoint(self, waypoint, kind, reset_retries=True):
+        self.current_waypoint = waypoint
+        self.waypoint_kind = kind
+        self.waypoint_set_tick = self.tick_counter
+        self.waypoint_timeout_tick = self.tick_counter + self.nav_cfg['waypoint_timeout_ticks']
+        self.last_waypoint_dist = distance(self.agent.pos, waypoint)
+        self.no_progress_ticks = 0
+        if reset_retries:
+            self.stuck_retries = 0
+
+
+    def _clear_waypoint(self):
+        self.current_waypoint = None
+        self.waypoint_kind = None
+        self.waypoint_set_tick = 0
+        self.waypoint_timeout_tick = 0
+        self.last_waypoint_dist = math.inf
+        self.no_progress_ticks = 0
+        self.stuck_retries = 0
+
+
+    def _update_progress(self, dist):
+        if dist > self.last_waypoint_dist - self.nav_cfg['min_progress_per_tick']:
+            self.no_progress_ticks += 1
+        else:
+            self.no_progress_ticks = 0
+            self.stuck_retries = 0
+
+        self.last_waypoint_dist = dist
+        return self.no_progress_ticks >= self.nav_cfg['stuck_ticks']
 
 
